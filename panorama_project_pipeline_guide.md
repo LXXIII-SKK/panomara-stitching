@@ -377,6 +377,99 @@ Ví dụ:
 }
 ```
 
+## 7.6A. Rule of thumb cho các field cần review thủ công
+
+Các field dưới đây không nên auto-fill hoàn toàn chỉ từ code. Nên xem ảnh thật, log pairwise, và nếu có thì xem thêm `stability_check`.
+
+### A. Nhóm nhãn tổng quát
+
+`type`
+- chọn `indoor` nếu scene chủ yếu là không gian kín như phòng, hành lang, lớp học, cabin, showroom
+- chọn `outdoor` nếu scene chủ yếu là không gian mở như sân, đường, mặt ngoài tòa nhà, công viên
+- chọn `unknown` nếu scene pha trộn mạnh hoặc không nhìn chắc bằng mắt
+
+`capture_group`
+- chọn `core` cho các scene chuẩn dùng làm benchmark chính
+- chọn `large` cho các scene chuỗi dài dùng để stress-test hoặc extended evaluation
+- nếu scene được giữ lại chủ yếu vì muốn thử chuỗi dài, drift tích lũy, hoặc quét rộng quanh người, ưu tiên `large`
+
+`category`
+- chọn `success` khi scene stitch ổn định, adjacent pairs sạch, và kết quả panorama dùng được lặp lại nhiều lần
+- chọn `hard_valid` khi scene vẫn thường stitch được nhưng có weak pair, output variation, parallax nhẹ, hoặc chỉ ổn định vừa phải
+- chọn `failure` khi scene thường fail, hoặc chỉ thỉnh thoảng ra panorama nhưng không đủ tin cậy để xem như kết quả hợp lệ
+- có thể dùng `stability_check` như rule phụ:
+  - `stable_success` thường hợp với `success`
+  - `unstable_mix` thường hợp với `hard_valid`
+  - `stable_failure` thường hợp với `failure`
+  - `success_with_output_variation` cần xem bằng mắt để quyết định giữa `success` và `hard_valid`
+
+`difficulty`
+- chọn `easy` nếu số ảnh ít, overlap rõ, pairwise mạnh, và scene stitch sạch
+- chọn `medium` nếu scene stitch tốt nhưng có một vài yếu tố bất lợi nhẹ như exposure change nhỏ hoặc output variation nhỏ
+- chọn `hard` nếu có chain dài, weak pair, repeated pattern, parallax, hoặc instability rõ rệt
+
+`recommended_use`
+- `core_benchmark`: scene chuẩn, sạch, phù hợp làm ví dụ baseline chính
+- `core_hard_benchmark`: scene vẫn hợp lệ nhưng khó hơn benchmark thường
+- `large_stress_test`: scene dài hoặc quét rộng để thử độ bền pipeline
+- `hard_case_analysis`: scene ghép được nhưng có yếu tố khó đáng phân tích
+- `failure_analysis`: scene thất bại rõ ràng
+- `manual_review`: chỉ dùng tạm khi scene mới thêm và chưa gắn nhãn xong
+
+`issues`
+- chỉ ghi các nguyên nhân nổi bật thực sự ảnh hưởng đến stitching
+- không cần liệt kê tất cả mọi thứ nhìn thấy trong ảnh
+- ưu tiên các vấn đề tác động trực tiếp đến match, homography, seam hoặc stability
+
+`notes`
+- nên ghi 1–3 câu ngắn giải thích tại sao scene được gán nhãn hiện tại
+- nên nói rõ mắt xích yếu ở đâu nếu scene không sạch hoàn toàn
+- nếu scene được tách từ scene lớn hơn hoặc có reference image riêng, nên ghi rõ
+
+### B. Nhóm cờ `has_*`
+
+`has_moving_objects`
+- chọn `true` nếu người, xe, quạt, sóng nước, hoặc vật thể động đi qua vùng overlap và có thể gây ghosting / duplicate object
+- chọn `false` nếu phần lớn overlap là tĩnh
+- chọn `null` nếu không chắc vì không quan sát rõ vùng overlap
+
+`has_repeated_patterns`
+- chọn `true` nếu overlap bị chi phối bởi các pattern lặp như cửa sổ giống nhau, gạch, ô kệ, nan dọc, mặt kính nhiều ô
+- chọn `false` nếu scene có đủ điểm neo độc nhất để phân biệt vị trí
+- chọn `null` nếu scene có pattern lặp nhưng chưa rõ mức ảnh hưởng
+
+`has_low_texture`
+- chọn `true` nếu vùng overlap chủ yếu là tường trơn, trần, nền trống, bầu trời, hoặc bề mặt ít góc/cạnh
+- chọn `false` nếu vùng overlap có nhiều góc, chữ, vật thể, biên rõ
+- chọn `null` nếu scene pha trộn mạnh và chưa rõ vùng overlap thật sự nghèo texture hay không
+
+`has_parallax`
+- chọn `true` nếu camera có translation rõ hoặc có foreground gần khiến foreground/background dịch tương đối khác nhau
+- chọn `false` nếu scene chủ yếu quay quanh một tâm tương đối cố định và ít vật gần camera
+- chọn `null` nếu chưa đủ chắc từ ảnh hoặc cần xem lại hiện tượng ghosting
+
+`has_exposure_change`
+- chọn `true` nếu brightness / white balance / màu sắc thay đổi rõ giữa các ảnh liền kề, nhất là trong vùng overlap
+- chọn `false` nếu ánh sáng và màu giữa các ảnh khá đều
+- chọn `null` nếu khác biệt rất nhẹ và chưa chắc có ảnh hưởng thực tế
+
+`has_motion_blur`
+- chọn `true` nếu một hoặc nhiều ảnh bị lia, chữ/biên bị kéo, hoặc chi tiết mịn mất rõ rệt
+- chọn `false` nếu chi tiết nhìn đủ sắc
+- chọn `null` nếu chỉ hơi mềm nhưng chưa rõ là blur hay do texture thấp
+
+`has_insufficient_overlap`
+- chọn `true` nếu hai ảnh liền kề chia sẻ quá ít nội dung dùng được, hoặc pair diagnostics có weak/fail rõ vì thiếu overlap
+- chọn `false` nếu overlap nhìn bằng mắt vẫn liên tục và đủ để match
+- chọn `null` nếu scene fail nhưng chưa chắc là do overlap hay do nguyên nhân khác như repeated pattern / parallax
+
+### C. Rule phụ khi dùng log tự động
+
+- không dùng chỉ một lần `stitcher_status` để chốt nhãn cuối; nên xem thêm `stability_check.ok_rate`
+- nếu `ok_rate` cao nhưng `is_output_consistent = false`, scene vẫn có thể nên để `hard_valid`
+- nếu pairwise đều mạnh nhưng panorama vẫn dao động, ưu tiên ghi chú thêm `output_variation` trong `issues`
+- nếu scene có `reference_files`, không dùng các ảnh đó để đánh giá chuỗi chính
+
 # BƯỚC 7. Data audit
 
 ## 7.10. Nên kiểm tra thủ công
@@ -384,6 +477,27 @@ Ví dụ:
 - có ảnh nào mờ nặng không
 - thứ tự ảnh đã đúng theo chuỗi overlap chưa
 - có ảnh cầu nối cần chèn không
+
+### Rule of thumb cho audit thủ công
+
+`ảnh có overlap không`
+- tốt nếu mỗi ảnh kề nhau chia sẻ khoảng 30–60% nội dung dùng được
+- borderline nếu overlap nhìn bằng mắt còn nhưng mỏng hoặc chỉ dựa vào một dải hẹp của cảnh
+- yếu nếu hai ảnh chỉ chạm nhau rất ít hoặc nội dung chung chủ yếu là vùng trơn / pattern lặp
+
+`có ảnh nào mờ nặng không`
+- đánh dấu blur nếu chữ nhỏ khó đọc, mép vật bị kéo dài, hoặc chi tiết mịn biến mất rõ rệt
+- nếu ảnh chỉ hơi mềm nhưng vẫn còn nhiều keypoints tốt, có thể chưa cần gắn blur
+
+`thứ tự ảnh đã đúng theo chuỗi overlap chưa`
+- thứ tự đúng khi ảnh `i` thường overlap mạnh nhất với `i-1` và `i+1`
+- nếu một ảnh overlap tốt hơn với ảnh đứng xa hơn trong danh sách, thứ tự hiện tại có thể sai
+- nếu có ảnh tham chiếu / validation shot chụp muộn, nên đưa nó ra `reference_files` thay vì để trong chuỗi chính
+
+`có ảnh cầu nối cần chèn không`
+- chèn bridge image khi A→B ổn nhưng B→C yếu, trong khi có thêm D giúp nối B với C tự nhiên hơn
+- dấu hiệu thường thấy là một pair giữa chuỗi bị `weak/fail` dù các pair hai bên vẫn ổn
+- sau khi chèn, thứ tự nên phản ánh đường đi capture thật chứ không chỉ theo timestamp
 
 ## 7.11. Nên kiểm tra bằng code
 Cho từng ảnh:
