@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import argparse
 import json
-import math
 import sys
 from collections import Counter
 from datetime import datetime
@@ -15,18 +15,26 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+cv2.ocl.setUseOpenCL(False)
+
 from project_utils.panorama_dataset import list_scene_dirs, ordered_scene_files
 DATA_ROOT = PROJECT_ROOT / "data" / "raw"
 ORB_NFEATURES = 4000
 RATIO_TEST = 0.75
 RANSAC_REPROJ_THRESHOLD = 4.0
 STITCH_MAX_INPUT_WIDTH = 3000
+DEFAULT_STABILITY_RUNS = 10
+STABILITY_SUCCESS_RATE = 0.9
+STABILITY_FAILURE_RATE = 0.2
+STITCHER_EXCEPTION_CODE = -999
+PANORAMA_SHAPE_BUCKET_SIZE = 100
 
 STATUS_NAMES = {
     int(cv2.Stitcher_OK): "OK",
     int(cv2.Stitcher_ERR_NEED_MORE_IMGS): "ERR_NEED_MORE_IMGS",
     int(cv2.Stitcher_ERR_HOMOGRAPHY_EST_FAIL): "ERR_HOMOGRAPHY_EST_FAIL",
     int(cv2.Stitcher_ERR_CAMERA_PARAMS_ADJUST_FAIL): "ERR_CAMERA_PARAMS_ADJUST_FAIL",
+    STITCHER_EXCEPTION_CODE: "EXCEPTION",
 }
 
 MANUAL_FIELDS = [
@@ -62,6 +70,29 @@ DEFAULT_META = {
     "has_insufficient_overlap": None,
     "notes": "",
 }
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Regenerate scene meta.json files from the current dataset.")
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=DATA_ROOT,
+        help="Root directory containing scene folders.",
+    )
+    parser.add_argument(
+        "--scene",
+        action="append",
+        dest="scenes",
+        help="Specific scene_id to regenerate. Repeat the flag to target multiple scenes.",
+    )
+    parser.add_argument(
+        "--stability-runs",
+        type=int,
+        default=DEFAULT_STABILITY_RUNS,
+        help="How many repeated cv2.Stitcher runs to use for stability_check. Use 0 to skip.",
+    )
+    return parser
 
 
 def load_bgr(path: Path) -> np.ndarray:
@@ -234,21 +265,130 @@ def pair_metrics(file_a: Path, file_b: Path, gray_a, gray_b, keypoints_a, keypoi
     }
 
 
-def stitcher_summary(files: list[Path]) -> tuple[int, str, dict | None]:
-    images = [resize_keep_aspect(load_bgr(path), STITCH_MAX_INPUT_WIDTH) for path in files]
+def stitch_once(images: list[np.ndarray]) -> tuple[int, str, dict | None, str | None]:
     stitcher = cv2.Stitcher_create(cv2.Stitcher_PANORAMA)
-    status_code, panorama = stitcher.stitch(images)
-    status_code = int(status_code)
-    panorama_shape = None
-    if status_code == int(cv2.Stitcher_OK) and panorama is not None:
-        panorama_shape = {
-            "width": int(panorama.shape[1]),
-            "height": int(panorama.shape[0]),
-        }
-    return status_code, STATUS_NAMES.get(status_code, f"CODE_{status_code}"), panorama_shape
+    try:
+        status_code, panorama = stitcher.stitch(images)
+        status_code = int(status_code)
+        panorama_shape = None
+        if status_code == int(cv2.Stitcher_OK) and panorama is not None:
+            panorama_shape = {
+                "width": int(panorama.shape[1]),
+                "height": int(panorama.shape[0]),
+            }
+        return status_code, STATUS_NAMES.get(status_code, f"CODE_{status_code}"), panorama_shape, None
+    except cv2.error as exc:
+        error_message = " ".join(str(exc).split())
+        return STITCHER_EXCEPTION_CODE, STATUS_NAMES[STITCHER_EXCEPTION_CODE], None, error_message
 
 
-def regenerate_scene_meta(scene_dir: Path) -> dict:
+def classify_stability(
+    ok_rate: float,
+    dominant_status: str,
+    dominant_rate: float,
+    distinct_statuses: int,
+    dominant_shape_rate: float | None,
+    output_consistent: bool | None,
+) -> str:
+    if distinct_statuses == 1 and dominant_status == "OK" and output_consistent is not False:
+        return "stable_success"
+    if distinct_statuses == 1 and dominant_status != "OK":
+        return "stable_failure"
+    if ok_rate >= STABILITY_SUCCESS_RATE and output_consistent is False:
+        return "success_with_output_variation"
+    if ok_rate >= STABILITY_SUCCESS_RATE:
+        return "borderline_success"
+    if ok_rate <= STABILITY_FAILURE_RATE and dominant_status != "OK" and dominant_rate >= STABILITY_SUCCESS_RATE:
+        return "borderline_failure"
+    return "unstable_mix"
+
+
+def stitcher_stability_check(images: list[np.ndarray], runs: int) -> dict | None:
+    if runs <= 0:
+        return None
+
+    status_counter: Counter[str] = Counter()
+    shape_counter: Counter[tuple[int, int]] = Counter()
+    shape_bucket_counter: Counter[tuple[int, int]] = Counter()
+    error_counter: Counter[str] = Counter()
+    for _ in range(runs):
+        _, status_name, panorama_shape, error_message = stitch_once(images)
+        status_counter.update([status_name])
+        if panorama_shape is not None:
+            exact_shape = (panorama_shape["width"], panorama_shape["height"])
+            shape_counter.update([exact_shape])
+            bucket_shape = (
+                int(round(panorama_shape["width"] / PANORAMA_SHAPE_BUCKET_SIZE) * PANORAMA_SHAPE_BUCKET_SIZE),
+                int(round(panorama_shape["height"] / PANORAMA_SHAPE_BUCKET_SIZE) * PANORAMA_SHAPE_BUCKET_SIZE),
+            )
+            shape_bucket_counter.update([bucket_shape])
+        if error_message:
+            error_counter.update([error_message])
+
+    dominant_status, dominant_count = status_counter.most_common(1)[0]
+    ok_runs = int(status_counter.get("OK", 0))
+    ok_rate = float(ok_runs / runs)
+    dominant_rate = float(dominant_count / runs)
+    shape_samples = [
+        {"width": width, "height": height, "count": int(count)}
+        for (width, height), count in shape_counter.most_common()
+    ]
+    dominant_shape_rate = None
+    dominant_shape = None
+    output_consistent = None
+    bucket_samples = [
+        {"width": width, "height": height, "count": int(count)}
+        for (width, height), count in shape_bucket_counter.most_common()
+    ]
+    dominant_bucket_shape = None
+    dominant_bucket_shape_rate = None
+    if shape_counter:
+        (dominant_width, dominant_height), dominant_shape_count = shape_counter.most_common(1)[0]
+        dominant_shape = {"width": int(dominant_width), "height": int(dominant_height)}
+        dominant_shape_rate = float(dominant_shape_count / max(ok_runs, 1))
+    if shape_bucket_counter:
+        (bucket_width, bucket_height), bucket_count = shape_bucket_counter.most_common(1)[0]
+        dominant_bucket_shape = {"width": int(bucket_width), "height": int(bucket_height)}
+        dominant_bucket_shape_rate = float(bucket_count / max(ok_runs, 1))
+        output_consistent = dominant_bucket_shape_rate >= STABILITY_SUCCESS_RATE
+
+    return {
+        "runs": int(runs),
+        "status_counts": dict(sorted(status_counter.items())),
+        "ok_runs": int(ok_runs),
+        "ok_rate": round(ok_rate, 3),
+        "dominant_status": dominant_status,
+        "dominant_rate": round(dominant_rate, 3),
+        "is_consistent": len(status_counter) == 1,
+        "ok_panorama_shape_counts": shape_samples,
+        "dominant_ok_panorama_shape": dominant_shape,
+        "dominant_ok_panorama_shape_rate": None if dominant_shape_rate is None else round(dominant_shape_rate, 3),
+        "ok_panorama_shape_bucket_size": PANORAMA_SHAPE_BUCKET_SIZE,
+        "ok_panorama_shape_bucket_counts": bucket_samples,
+        "dominant_ok_panorama_shape_bucket": dominant_bucket_shape,
+        "dominant_ok_panorama_shape_bucket_rate": None if dominant_bucket_shape_rate is None else round(dominant_bucket_shape_rate, 3),
+        "is_output_consistent": output_consistent,
+        "error_counts": dict(error_counter),
+        "is_stable": bool(
+            dominant_rate >= STABILITY_SUCCESS_RATE
+            and (
+                dominant_status != "OK"
+                or dominant_bucket_shape_rate is None
+                or dominant_bucket_shape_rate >= STABILITY_SUCCESS_RATE
+            )
+        ),
+        "stability_label": classify_stability(
+            ok_rate,
+            dominant_status,
+            dominant_rate,
+            len(status_counter),
+            dominant_bucket_shape_rate,
+            output_consistent,
+        ),
+    }
+
+
+def regenerate_scene_meta(scene_dir: Path, stability_runs: int = DEFAULT_STABILITY_RUNS) -> dict:
     ordered_files, reference_files, previous_meta, _ = ordered_scene_files(scene_dir)
     if len(ordered_files) < 2:
         raise ValueError(f"{scene_dir.name}: need at least 2 ordered images")
@@ -281,7 +421,9 @@ def regenerate_scene_meta(scene_dir: Path) -> dict:
             )
         )
 
-    stitch_code, stitch_name, stitch_output = stitcher_summary(ordered_files)
+    stitcher_images = [resize_keep_aspect(load_bgr(path), STITCH_MAX_INPUT_WIDTH) for path in ordered_files]
+    stitch_code, stitch_name, stitch_output, stitch_error = stitch_once(stitcher_images)
+    stability_check = stitcher_stability_check(stitcher_images, stability_runs)
     pair_counter = Counter(row["pair_label"] for row in pair_rows)
     capture_span_seconds, max_capture_gap_seconds = compute_capture_stats(ordered_files, previous_meta)
 
@@ -300,7 +442,7 @@ def regenerate_scene_meta(scene_dir: Path) -> dict:
                 "stitcher_status_code": stitch_code,
                 "stitcher_status": stitch_name,
                 "stitcher_output": stitch_output,
-                "stitcher_error": None,
+                "stitcher_error": stitch_error,
                 "avg_keypoints": round(float(np.mean([row["keypoints"] for row in image_rows])), 1),
                 "min_keypoints": int(min(row["keypoints"] for row in image_rows)),
                 "avg_blur_score": round(float(np.mean([row["blur_score"] for row in image_rows])), 2),
@@ -316,6 +458,7 @@ def regenerate_scene_meta(scene_dir: Path) -> dict:
                     "weak": int(pair_counter.get("weak", 0)),
                     "fail": int(pair_counter.get("fail", 0)),
                 },
+                "stability_check": stability_check,
             },
             "image_stats": image_rows,
             "pair_audit": pair_rows,
@@ -326,9 +469,15 @@ def regenerate_scene_meta(scene_dir: Path) -> dict:
 
 
 def main():
+    args = build_parser().parse_args()
+    root = args.root.resolve()
+    target_scenes = set(args.scenes or [])
+
     updated = []
-    for scene_dir in list_scene_dirs(DATA_ROOT):
-        meta = regenerate_scene_meta(scene_dir)
+    for scene_dir in list_scene_dirs(root):
+        if target_scenes and scene_dir.name not in target_scenes:
+            continue
+        meta = regenerate_scene_meta(scene_dir, stability_runs=args.stability_runs)
         meta_path = scene_dir / "meta.json"
         meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         updated.append(scene_dir.name)
