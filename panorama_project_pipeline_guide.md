@@ -815,15 +815,8 @@ python stitch.py --scene data/raw/scene_01 --feature orb --matcher bf --blend fe
 - không lưu số liệu định lượng
 - không có failure analysis
 
----
 
-## 11) Mẫu mô tả pipeline ngắn gọn cho proposal/report
-
-**Pipeline của hệ thống gồm các bước: (1) thu thập bộ ảnh chồng lấp theo từng scene, (2) kiểm tra và tổ chức dữ liệu, (3) tiền xử lý ảnh, (4) phát hiện keypoints và trích xuất descriptor, (5) so khớp đặc trưng giữa các ảnh liền kề, (6) loại outlier bằng RANSAC, (7) ước lượng homography để căn chỉnh hình học, (8) warp ảnh lên cùng canvas, (9) ghép và làm mượt vùng overlap bằng kỹ thuật blending, và (10) đánh giá chất lượng panorama bằng cả chỉ số định lượng lẫn phân tích trực quan. Hệ thống sẽ so sánh ít nhất hai chiến lược feature-description và hai kỹ thuật matching/blending để xác định phương án phù hợp nhất cho từng điều kiện cảnh.**
-
----
-
-## 12) Kết luận thực tế cho nhóm
+## 11) Kết luận thực tế cho nhóm
 
 - **Dữ liệu chính**: scene thật, ảnh chụp riêng, có overlap
 - **Core scenes**: 3–5 ảnh/scene cho đánh giá chính
