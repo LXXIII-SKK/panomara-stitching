@@ -1,0 +1,233 @@
+# Panorama Scene Data Audit Notebook
+
+Notebook này dùng để **audit chất lượng dataset trước khi kết luận scene có nên đem đi stitch hay không**.
+
+Khác với notebook OpenCV stitcher:
+- `01_data_audit.ipynb` tập trung vào **quality screening** và **giải thích nguyên nhân rủi ro**
+- `06_opencv_scene_stitcher.ipynb` tập trung vào **kết quả stitch thật**
+
+Bản nâng cấp này được tách thành nhiều module nhỏ. Mỗi module có:
+- một markdown cell giải thích nó làm gì
+- một code cell riêng để bạn đọc, sửa và chạy độc lập
+
+---
+## Module 1. Imports and Notebook Setup
+
+Module này nạp toàn bộ thư viện cần thiết cho audit.
+
+Điểm mới ở bản vá này:
+- import thêm helper để đọc **inventory ảnh thật** từ thư mục scene
+- không chỉ dựa vào `meta.json`
+- sẵn sàng audit nhiều feature methods nếu cần (`ORB`, `SIFT`)
+
+---
+## Module 2. Paths and Output Layout
+
+Module này định nghĩa:
+- nơi đọc dữ liệu gốc (`data/raw`)
+- nơi lưu output audit (`outputs/audit`)
+- các thư mục con để lưu ảnh debug nếu cần
+
+Mục tiêu là giúp notebook chạy lặp lại nhiều lần mà không cần sửa path ở nhiều chỗ.
+
+---
+## Module 3. Audit Configuration and Thresholds
+
+Đây là policy layer của notebook.
+
+Điểm mới:
+- có thể audit nhiều methods thay vì khóa cứng một method
+- có audit orientation thử 4 góc quay
+- có transform sanity check để bắt warp/canvas bất thường
+- có recommendation sơ bộ cho phase preprocessing
+
+---
+## Module 4. Dataset, Metadata, and Actual File Inventory
+
+Bản cũ đã đọc `meta.json`, nhưng review đúng ở chỗ: `meta.json` không nên được tin tuyệt đối.
+
+Vì vậy module này làm hai việc song song:
+- đọc metadata nếu có
+- kiểm chứng lại bằng **inventory ảnh thật trong thư mục**
+
+Nếu `meta.json` hợp lệ thì vẫn có thể dùng thứ tự từ đó.
+Nếu không, notebook sẽ fallback bằng logic thực tế hơn thay vì fail im lặng.
+
+---
+## Module 4A. Actual Data Validation and Ordering Resolution
+
+Module này là điểm vá quan trọng nhất theo review.
+
+Mục tiêu:
+- xác minh scene từ **ảnh thật**
+- chỉ dùng `meta.json` khi order trong đó thực sự hợp lệ
+- ghi lại cờ cảnh báo như:
+  - thiếu file trong meta
+  - fallback sang numbered order
+  - có numbered gaps
+  - có reference files ngoài chain chính
+
+Nhờ đó audit sẽ bớt lệ thuộc vào metadata cũ hoặc metadata sai.
+
+---
+## Module 5. Visualization Helpers
+
+Module này chứa các helper để:
+- hiển thị ảnh trong notebook
+- lưu ảnh keypoints / matches / inliers khi bật `SAVE_VISUALS`
+- hỗ trợ inspect scene bằng mắt sau khi auto-audit
+
+---
+## Module 6. Image Loading, Resize, and Image-Level Metrics
+
+Đây là layer đánh giá từng ảnh.
+
+Review gợi ý nên chuẩn bị dữ liệu cho phase preprocessing, nên module này ngoài metric cũ còn sinh:
+- gợi ý preprocess ở mức ảnh
+- cờ cảnh báo ảnh quá mờ / quá tối / quá phẳng
+
+---
+## Module 6A. Image-Level Flags and Preprocess Outlook
+
+Module nhỏ này chuyển image metrics thành cờ dễ đọc hơn.
+
+Nó không quyết định scene thành công hay thất bại, nhưng rất hữu ích để:
+- biết ảnh nào nên bỏ
+- biết ảnh nào đáng thử CLAHE / brightness lift / sharpen nhẹ
+
+---
+## Module 7. Feature Extraction and Pair Geometry
+
+Module này vẫn là xương sống của audit, nhưng giờ nó chuẩn bị dữ liệu cho:
+- nhiều feature methods
+- orientation trial
+- transform sanity
+
+Nói ngắn gọn: ngoài việc hỏi pair này match được không, notebook còn hỏi:
+- nếu xoay ảnh thì có cải thiện mạnh không?
+- homography này có dẫn đến warp/canvas bất thường không?
+
+---
+## Module 7A. Orientation Audit and Transform Sanity
+
+Đây là phần vá trực tiếp theo review:
+
+- `orientation_trial_score`: thử xoay ảnh `0 / 90 / 180 / 270` độ để xem orientation hiện tại có đáng nghi không
+- `transform_extent_sanity`: kiểm tra projected corners, canvas inflation, aspect explosion
+
+Mục tiêu là bắt những scene mà:
+- pair metrics trông tạm ổn
+- nhưng warp/homography thực tế lại rất đáng nghi
+
+---
+## Module 8. Pair Scoring, Failure Logic, and Preprocessing Recommendations
+
+Đây là nơi notebook biến metric thành quyết định thực tế hơn.
+
+Điểm mới của bản vá:
+- pair bị phạt thêm nếu `transform sanity` xấu
+- có flag nghi ngờ `rotation mismatch`
+- có `preprocess recommendation` ở cả pair-level và scene-level
+- scene classification sẽ nhìn cả inventory, adjacent pairs, và skip-pairs
+
+---
+## Module 9. Result Schemas
+
+Result schema giờ rộng hơn để hỗ trợ notebook preprocessing tiếp theo.
+
+Bên cạnh metric thuần, chúng ta lưu thêm:
+- inventory / order trust context
+- orientation suspicion
+- transform sanity ratios
+- preprocess recommendations
+
+---
+## Module 11. Scene Audit Runner
+
+Đây là module trung tâm của notebook sau bản vá.
+
+Một scene sẽ được audit theo các bước:
+1. xác minh inventory thật của scene
+2. nạp chain ảnh theo thứ tự đáng tin nhất
+3. đo image metrics
+4. đo adjacent pairs
+5. thử orientation audit cho adjacent pairs
+6. kiểm transform sanity
+7. nếu bật thì đo thêm skip-pairs
+8. tổng hợp scene label + preprocess recommendations
+
+---
+## Module 12. Run the Audit on All Scenes
+
+Cell này chạy toàn bộ dataset và ghi CSV.
+
+Điểm mới:
+- có thể audit nhiều feature methods trong một lượt
+- scene vẫn được đọc từ actual inventory, không chỉ từ metadata
+- output CSV có thêm cột recommendation để nối sang phase preprocessing
+
+---
+## Module 13. Summary Tables
+
+Module này biến kết quả thô thành bảng đọc nhanh.
+
+Bây giờ ngoài scene label, chúng ta còn đọc nhanh được:
+- scene nào inventory đang đáng nghi
+- scene nào nên chuyển thẳng sang preprocessing
+- scene nào nên tách scene / recapture / so sánh ORB vs SIFT
+
+---
+## Module 14. Diagnostic Plots
+
+Histogram và bảng đếm ở đây giúp tune threshold.
+
+Nếu audit nhiều methods, notebook sẽ:
+- plot histogram theo `PRIMARY_FEATURE_METHOD`
+- đồng thời hiển thị bảng đếm theo từng method để compare nhanh
+- và tách thêm `success-like` vs `failure-like` để bạn nhìn rõ distribution khác nhau giữa nhóm stitch được và nhóm dễ fail
+
+---
+## Module 15. Inspect One Scene Manually
+
+Đây là cell để đào sâu một scene cụ thể sau khi auto-audit.
+
+Điểm mới:
+- inspect theo `feature_method`
+- nếu scene chưa có trong dataframe hiện tại, notebook có thể audit on-the-fly
+- hiển thị cả inventory context và preprocess outlook
+
+---
+## Suggested Interpretation
+
+### `inventory_status`
+- `ok`: thứ tự và inventory của scene nhìn đáng tin
+- `warning`: scene vẫn audit được nhưng nên kiểm actual files / order / reference shots
+- `error`: inventory có vấn đề đủ lớn để không nên tin scene-level conclusion hoàn toàn
+
+### `likely_good`
+- adjacent pairs sạch tương đối đồng đều
+- không có `skip-pair` gãy rõ
+- không có transform sanity fail đáng kể
+- thường sẵn sàng cho phase preprocessing hoặc stitching baseline
+
+### `borderline`
+- có ít nhất một mắt xích yếu
+- hoặc orientation / transform sanity bắt đầu đáng ngại
+- hoặc pairwise ổn nhưng `skip-pair` cho thấy chuỗi toàn cục chưa thật sạch
+
+### `likely_fail`
+- có pair fail cứng
+- hoặc inventory invalid
+- hoặc chain có dấu hiệu gãy ở mức toàn cục / transform fail rõ
+
+### `scene_preprocess_recommendations`
+- đây là danh sách action-oriented để nối sang notebook preprocessing
+- nếu xuất hiện `recapture_*` hoặc `split_scene_*` thì scene đó không chỉ thiếu preprocessing, mà còn có vấn đề capture / chain geometry
+
+### `audit_vs_opencv`
+- `aligned`: audit và OpenCV kể cùng một câu chuyện
+- `audit_more_optimistic`: pairwise audit vẫn đang lạc quan hơn stitch thật
+- `audit_more_conservative`: audit nghiêm hơn stitch thật
+- `needs_manual_judgment`: scene ở vùng xám, nên xem trực tiếp
+
+---
