@@ -8,24 +8,55 @@ from nbformat.v4 import new_code_cell, new_markdown_cell
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK_PATH = ROOT / 'notebooks' / '01_data_audit.ipynb'
+TITLE_NORMALIZATION = {
+    '## Module 1. Imports and Notebook Setup': '## Module 1. Imports and Notebook Setup',
+    '## Module 2. Paths and Output Layout': '## Module 2. Paths and Output Layout',
+    '## Module 3. Audit Configuration and Thresholds': '## Module 3. Audit Configuration and Thresholds',
+    '## Module 4. Dataset, Metadata, and Actual File Inventory': '## Module 4. Dataset, Metadata, and Actual File Inventory',
+    '## Module 4A. Actual Data Validation and Ordering Resolution': '## Module 5. Actual Data Validation and Ordering Resolution',
+    '## Module 5. Actual Data Validation and Ordering Resolution': '## Module 5. Actual Data Validation and Ordering Resolution',
+    '## Module 6. Image Loading, Resize, and Image-Level Metrics': '## Module 6. Image Loading, Resize, and Image-Level Metrics',
+    '## Module 6A. Image-Level Flags and Preprocess Outlook': '## Module 7. Image-Level Flags and Preprocess Outlook',
+    '## Module 7. Image-Level Flags and Preprocess Outlook': '## Module 7. Image-Level Flags and Preprocess Outlook',
+    '## Module 7. Feature Extraction and Pair Geometry': '## Module 8. Feature Extraction and Pair Geometry',
+    '## Module 8. Feature Extraction and Pair Geometry': '## Module 8. Feature Extraction and Pair Geometry',
+    '## Module 7A. Orientation Audit and Transform Sanity': '## Module 9. Orientation Audit and Transform Sanity',
+    '## Module 9. Orientation Audit and Transform Sanity': '## Module 9. Orientation Audit and Transform Sanity',
+    '## Module 8. Pair Scoring, Failure Logic, and Preprocessing Recommendations': '## Module 10. Pair Scoring, Failure Logic, and Preprocessing Recommendations',
+    '## Module 10. Pair Scoring, Failure Logic, and Preprocessing Recommendations': '## Module 10. Pair Scoring, Failure Logic, and Preprocessing Recommendations',
+    '## Module 9. Result Schemas': '## Module 11. Result Schemas',
+    '## Module 11. Result Schemas': '## Module 11. Result Schemas',
+    '## Module 11. Scene Audit Runner': '## Module 12. Scene Audit Runner',
+    '## Module 12. Scene Audit Runner': '## Module 12. Scene Audit Runner',
+    '## Module 12. Run the Audit on All Scenes': '## Module 13. Run the Audit on All Scenes',
+    '## Module 13. Run the Audit on All Scenes': '## Module 13. Run the Audit on All Scenes',
+    '## Module 13. Summary Tables': '## Module 14. Summary Tables',
+    '## Module 14. Summary Tables': '## Module 14. Summary Tables',
+    '## Module 13A. Failure Case Examples': '## Module 15. Failure Case Examples',
+    '## Module 15. Failure Case Examples': '## Module 15. Failure Case Examples',
+    '## Module 14. Diagnostic Plots': '## Module 16. Diagnostic Plots',
+    '## Module 16. Diagnostic Plots': '## Module 16. Diagnostic Plots',
+    '## Module 15. Inspect One Scene Manually': '## Module 17. Inspect One Scene Manually',
+    '## Module 17. Inspect One Scene Manually': '## Module 17. Inspect One Scene Manually',
+}
 DESIRED_SECTION_ORDER = [
     '## Module 1. Imports and Notebook Setup',
     '## Module 2. Paths and Output Layout',
     '## Module 3. Audit Configuration and Thresholds',
     '## Module 4. Dataset, Metadata, and Actual File Inventory',
-    '## Module 4A. Actual Data Validation and Ordering Resolution',
+    '## Module 5. Actual Data Validation and Ordering Resolution',
     '## Module 6. Image Loading, Resize, and Image-Level Metrics',
-    '## Module 6A. Image-Level Flags and Preprocess Outlook',
-    '## Module 7. Feature Extraction and Pair Geometry',
-    '## Module 7A. Orientation Audit and Transform Sanity',
-    '## Module 8. Pair Scoring, Failure Logic, and Preprocessing Recommendations',
-    '## Module 9. Result Schemas',
-    '## Module 11. Scene Audit Runner',
-    '## Module 12. Run the Audit on All Scenes',
-    '## Module 13. Summary Tables',
-    '## Module 13A. Failure Case Examples',
-    '## Module 14. Diagnostic Plots',
-    '## Module 15. Inspect One Scene Manually',
+    '## Module 7. Image-Level Flags and Preprocess Outlook',
+    '## Module 8. Feature Extraction and Pair Geometry',
+    '## Module 9. Orientation Audit and Transform Sanity',
+    '## Module 10. Pair Scoring, Failure Logic, and Preprocessing Recommendations',
+    '## Module 11. Result Schemas',
+    '## Module 12. Scene Audit Runner',
+    '## Module 13. Run the Audit on All Scenes',
+    '## Module 14. Summary Tables',
+    '## Module 15. Failure Case Examples',
+    '## Module 16. Diagnostic Plots',
+    '## Module 17. Inspect One Scene Manually',
     '## Suggested Interpretation',
 ]
 
@@ -54,8 +85,24 @@ def top_level_title(cell) -> str | None:
         return None
     first = source.splitlines()[0].strip()
     if first.startswith('## '):
-        return first
+        return TITLE_NORMALIZATION.get(first, first)
     return None
+
+
+def normalize_section_titles(cells: list) -> list:
+    for cell in cells:
+        if cell.cell_type != 'markdown':
+            continue
+        source = (cell.source or '')
+        if not source.strip():
+            continue
+        lines = source.splitlines()
+        first = lines[0].strip()
+        normalized = TITLE_NORMALIZATION.get(first)
+        if normalized and normalized != first:
+            lines[0] = normalized
+            cell.source = '\n'.join(lines).rstrip() + '\n'
+    return cells
 
 
 def dedupe_titled_sections(cells: list) -> list:
@@ -140,8 +187,8 @@ def patch_notebook() -> None:
     original_cells = nb.cells
     new_cells = []
     injected_section_titles = {
-        '## Module 4A. Actual Data Validation and Ordering Resolution',
-        '## Module 13A. Failure Case Examples',
+        '## Module 5. Actual Data Validation and Ordering Resolution',
+        '## Module 15. Failure Case Examples',
     }
     skip_following_code = False
 
@@ -152,12 +199,13 @@ def patch_notebook() -> None:
 
         if cell.cell_type == 'markdown':
             source = (cell.source or '').strip()
-            if any(source.startswith(title) for title in injected_section_titles):
+            title = top_level_title(cell)
+            if title in injected_section_titles:
                 skip_following_code = True
                 continue
-            if source.startswith('## Module 14. Diagnostic Plots'):
+            if title == '## Module 16. Diagnostic Plots':
                 new_cells.append(new_markdown_cell(dedent('''
-                ## Module 13A. Failure Case Examples
+                ## Module 15. Failure Case Examples
 
                 Section này gom một **scene đại diện rõ nhất** cho từng failure case mà nhóm sẽ phân tích.
 
@@ -339,6 +387,57 @@ def patch_notebook() -> None:
                     + "    if scene_label == 'borderline':\n" \
                     + "        return 'needs_manual_judgment'\n" \
                     + "    return 'aligned'\n"
+                source = cell.source
+            if 'def load_bgr(' in source and 'def save_bgr(' not in source:
+                cell.source = source.rstrip() + '\n\n\ndef save_bgr(path: Path, image_bgr: np.ndarray) -> None:\n' \
+                    + "    path.parent.mkdir(parents=True, exist_ok=True)\n" \
+                    + "    ok = cv2.imwrite(str(path), image_bgr)\n" \
+                    + "    if not ok:\n" \
+                    + "        raise IOError(f\"Could not write image: {path}\")\n\n\n" \
+                    + "def show_bgr(image_bgr: np.ndarray, title: str = '') -> None:\n" \
+                    + "    plt.figure(figsize=(6, 4))\n" \
+                    + "    plt.imshow(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))\n" \
+                    + "    if title:\n" \
+                    + "        plt.title(title)\n" \
+                    + "    plt.axis('off')\n" \
+                    + "    plt.tight_layout()\n" \
+                    + "    plt.show()\n"
+                source = cell.source
+            if 'def analyze_pair(' in source and 'def draw_matches_image(' not in source:
+                cell.source = source.rstrip() + '\n\n\ndef draw_keypoints_image(image_bgr, keypoints):\n' \
+                    + "    return cv2.drawKeypoints(\n" \
+                    + "        image_bgr,\n" \
+                    + "        keypoints,\n" \
+                    + "        None,\n" \
+                    + "        color=(80, 220, 120),\n" \
+                    + "        flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS,\n" \
+                    + "    )\n\n\n" \
+                    + "def draw_matches_image(image_a_bgr, kp_a, image_b_bgr, kp_b, matches, max_draw=80):\n" \
+                    + "    keep = list(matches[:max_draw])\n" \
+                    + "    return cv2.drawMatches(\n" \
+                    + "        image_a_bgr,\n" \
+                    + "        kp_a,\n" \
+                    + "        image_b_bgr,\n" \
+                    + "        kp_b,\n" \
+                    + "        keep,\n" \
+                    + "        None,\n" \
+                    + "        flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,\n" \
+                    + "    )\n\n\n" \
+                    + "def draw_inlier_matches_image(image_a_bgr, kp_a, image_b_bgr, kp_b, matches, inlier_mask, max_draw=80):\n" \
+                    + "    if inlier_mask is None:\n" \
+                    + "        return draw_matches_image(image_a_bgr, kp_a, image_b_bgr, kp_b, matches, max_draw=max_draw)\n" \
+                    + "    keep = [match for match, is_inlier in zip(matches, inlier_mask.ravel().astype(bool)) if is_inlier][:max_draw]\n" \
+                    + "    return cv2.drawMatches(\n" \
+                    + "        image_a_bgr,\n" \
+                    + "        kp_a,\n" \
+                    + "        image_b_bgr,\n" \
+                    + "        kp_b,\n" \
+                    + "        keep,\n" \
+                    + "        None,\n" \
+                    + "        matchColor=(0, 255, 0),\n" \
+                    + "        singlePointColor=(160, 160, 160),\n" \
+                    + "        flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,\n" \
+                    + "    )\n"
 
         if idx == 1 and cell.cell_type == 'markdown':
             cell.source = dedent('''
@@ -711,6 +810,23 @@ def patch_notebook() -> None:
                 return resize_long_edge(image, max_long_edge)
 
 
+            def save_bgr(path: Path, image_bgr: np.ndarray) -> None:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                ok = cv2.imwrite(str(path), image_bgr)
+                if not ok:
+                    raise IOError(f"Could not write image: {path}")
+
+
+            def show_bgr(image_bgr: np.ndarray, title: str = '') -> None:
+                plt.figure(figsize=(6, 4))
+                plt.imshow(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+                if title:
+                    plt.title(title)
+                plt.axis('off')
+                plt.tight_layout()
+                plt.show()
+
+
             def to_gray(image_bgr):
                 return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
 
@@ -967,6 +1083,46 @@ def patch_notebook() -> None:
                     '_mask': mask,
                     '_H': homography,
                 }
+
+
+            def draw_keypoints_image(image_bgr, keypoints):
+                return cv2.drawKeypoints(
+                    image_bgr,
+                    keypoints,
+                    None,
+                    color=(80, 220, 120),
+                    flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS,
+                )
+
+
+            def draw_matches_image(image_a_bgr, kp_a, image_b_bgr, kp_b, matches, max_draw=80):
+                keep = list(matches[:max_draw])
+                return cv2.drawMatches(
+                    image_a_bgr,
+                    kp_a,
+                    image_b_bgr,
+                    kp_b,
+                    keep,
+                    None,
+                    flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+                )
+
+
+            def draw_inlier_matches_image(image_a_bgr, kp_a, image_b_bgr, kp_b, matches, inlier_mask, max_draw=80):
+                if inlier_mask is None:
+                    return draw_matches_image(image_a_bgr, kp_a, image_b_bgr, kp_b, matches, max_draw=max_draw)
+                keep = [match for match, is_inlier in zip(matches, inlier_mask.ravel().astype(bool)) if is_inlier][:max_draw]
+                return cv2.drawMatches(
+                    image_a_bgr,
+                    kp_a,
+                    image_b_bgr,
+                    kp_b,
+                    keep,
+                    None,
+                    matchColor=(0, 255, 0),
+                    singlePointColor=(160, 160, 160),
+                    flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+                )
             ''').strip() + '\n'
 
         if idx == 14:
@@ -1954,6 +2110,154 @@ def patch_notebook() -> None:
                 plt.tight_layout()
                 plt.show()
 
+            comparison_scenes = pd.DataFrame()
+            if not plot_scenes.empty and 'meta_category' in plot_scenes:
+                comparison_scenes = plot_scenes[plot_scenes['meta_category'].isin(['success', 'failure'])].copy()
+
+            if not comparison_scenes.empty and comparison_scenes['meta_category'].nunique() == 2:
+                print("\\nSuccess vs failure comparison (strict metadata categories only; `hard_valid` scenes excluded):")
+                display(comparison_scenes.groupby('meta_category').size().rename('num_scenes').reset_index())
+
+                scene_compare_metrics = [
+                    ('scene_score', 'Scene score'),
+                    ('avg_good_matches', 'Avg good matches'),
+                    ('avg_inlier_ratio', 'Avg inlier ratio'),
+                    ('avg_overlap_ratio', 'Avg overlap ratio'),
+                    ('max_reprojection_error', 'Max reprojection error'),
+                    ('avg_keypoints', 'Avg keypoints'),
+                ]
+                fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+                for ax, (column, title) in zip(axes.flat, scene_compare_metrics):
+                    success_values = comparison_scenes.loc[comparison_scenes['meta_category'] == 'success', column]
+                    failure_values = comparison_scenes.loc[comparison_scenes['meta_category'] == 'failure', column]
+                    success_values = success_values[np.isfinite(success_values)]
+                    failure_values = failure_values[np.isfinite(failure_values)]
+                    ax.boxplot(
+                        [success_values.values, failure_values.values],
+                        labels=['success', 'failure'],
+                        showmeans=True,
+                    )
+                    ax.set_title(f'{title} by scene category')
+                    ax.set_ylabel('value')
+                    ax.grid(alpha=0.25)
+                plt.tight_layout()
+                plt.show()
+
+                pair_compare = plot_pairs.merge(
+                    comparison_scenes[['scene_id', 'meta_category']].drop_duplicates(),
+                    on='scene_id',
+                    how='inner',
+                ) if not plot_pairs.empty else pd.DataFrame()
+                pair_compare = pair_compare[pair_compare['pair_gap'] == 1] if not pair_compare.empty and 'pair_gap' in pair_compare else pair_compare
+
+                if not pair_compare.empty:
+                    pair_compare_metrics = [
+                        ('good_matches', 'Good matches'),
+                        ('inlier_ratio', 'Inlier ratio'),
+                        ('overlap_ratio', 'Overlap ratio'),
+                        ('reprojection_error', 'Reprojection error'),
+                        ('pair_score', 'Pair score'),
+                        ('brightness_gap', 'Brightness gap'),
+                    ]
+                    fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+                    for ax, (column, title) in zip(axes.flat, pair_compare_metrics):
+                        success_values = pair_compare.loc[pair_compare['meta_category'] == 'success', column]
+                        failure_values = pair_compare.loc[pair_compare['meta_category'] == 'failure', column]
+                        success_values = success_values[np.isfinite(success_values)]
+                        failure_values = failure_values[np.isfinite(failure_values)]
+                        ax.boxplot(
+                            [success_values.values, failure_values.values],
+                            labels=['success', 'failure'],
+                            showmeans=True,
+                        )
+                        ax.set_title(f'{title} by scene category')
+                        ax.set_ylabel('value')
+                        ax.grid(alpha=0.25)
+                    plt.tight_layout()
+                    plt.show()
+            else:
+                print("\\nNeed both `success` and `failure` scenes in the current dataframe to plot success-vs-failure comparisons.")
+
+            comparison_scenes_3way = pd.DataFrame()
+            if not plot_scenes.empty and 'meta_category' in plot_scenes:
+                comparison_scenes_3way = plot_scenes[plot_scenes['meta_category'].isin(['success', 'hard_valid', 'failure'])].copy()
+
+            category_order = []
+            if not comparison_scenes_3way.empty:
+                present_categories = set(comparison_scenes_3way['meta_category'].dropna().unique())
+                category_order = [label for label in ['success', 'hard_valid', 'failure'] if label in present_categories]
+
+            if len(category_order) >= 2:
+                print("\\nSuccess vs hard_valid vs failure comparison (metadata categories):")
+                display(
+                    comparison_scenes_3way.groupby('meta_category').size()
+                    .reindex(category_order, fill_value=0)
+                    .rename('num_scenes')
+                    .reset_index()
+                )
+
+                scene_compare_metrics_3way = [
+                    ('scene_score', 'Scene score'),
+                    ('avg_good_matches', 'Avg good matches'),
+                    ('avg_inlier_ratio', 'Avg inlier ratio'),
+                    ('avg_overlap_ratio', 'Avg overlap ratio'),
+                    ('max_reprojection_error', 'Max reprojection error'),
+                    ('avg_keypoints', 'Avg keypoints'),
+                ]
+                fig, axes = plt.subplots(2, 3, figsize=(16, 8))
+                for ax, (column, title) in zip(axes.flat, scene_compare_metrics_3way):
+                    values_by_category = []
+                    labels = []
+                    for category in category_order:
+                        values = comparison_scenes_3way.loc[comparison_scenes_3way['meta_category'] == category, column]
+                        values = values[np.isfinite(values)]
+                        if len(values) > 0:
+                            values_by_category.append(values.values)
+                            labels.append(category)
+                    if values_by_category:
+                        ax.boxplot(values_by_category, labels=labels, showmeans=True)
+                    ax.set_title(f'{title} by scene category')
+                    ax.set_ylabel('value')
+                    ax.grid(alpha=0.25)
+                plt.tight_layout()
+                plt.show()
+
+                pair_compare_3way = plot_pairs.merge(
+                    comparison_scenes_3way[['scene_id', 'meta_category']].drop_duplicates(),
+                    on='scene_id',
+                    how='inner',
+                ) if not plot_pairs.empty else pd.DataFrame()
+                pair_compare_3way = pair_compare_3way[pair_compare_3way['pair_gap'] == 1] if not pair_compare_3way.empty and 'pair_gap' in pair_compare_3way else pair_compare_3way
+
+                if not pair_compare_3way.empty:
+                    pair_compare_metrics_3way = [
+                        ('good_matches', 'Good matches'),
+                        ('inlier_ratio', 'Inlier ratio'),
+                        ('overlap_ratio', 'Overlap ratio'),
+                        ('reprojection_error', 'Reprojection error'),
+                        ('pair_score', 'Pair score'),
+                        ('brightness_gap', 'Brightness gap'),
+                    ]
+                    fig, axes = plt.subplots(2, 3, figsize=(16, 8))
+                    for ax, (column, title) in zip(axes.flat, pair_compare_metrics_3way):
+                        values_by_category = []
+                        labels = []
+                        for category in category_order:
+                            values = pair_compare_3way.loc[pair_compare_3way['meta_category'] == category, column]
+                            values = values[np.isfinite(values)]
+                            if len(values) > 0:
+                                values_by_category.append(values.values)
+                                labels.append(category)
+                        if values_by_category:
+                            ax.boxplot(values_by_category, labels=labels, showmeans=True)
+                        ax.set_title(f'{title} by scene category')
+                        ax.set_ylabel('value')
+                        ax.grid(alpha=0.25)
+                    plt.tight_layout()
+                    plt.show()
+            else:
+                print("\\nNeed at least two of `success`, `hard_valid`, and `failure` in the current dataframe to plot the 3-way comparison.")
+
             if not df_scenes.empty and 'feature_method' in df_scenes:
                 print('Table legend: rows = feature methods, columns = scene labels / audit-vs-OpenCV buckets, values = number of scenes')
                 display(df_scenes.groupby(['feature_method', 'scene_label']).size().unstack(fill_value=0))
@@ -2081,6 +2385,7 @@ def patch_notebook() -> None:
 
     new_cells = dedupe_titled_sections(new_cells)
     new_cells = reorder_sections(new_cells)
+    new_cells = normalize_section_titles(new_cells)
     for cell in new_cells:
         if cell.cell_type == 'code':
             cell.source = unwrap_self_nested_code(cell.source or '')
