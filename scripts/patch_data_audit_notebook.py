@@ -8,14 +8,338 @@ from nbformat.v4 import new_code_cell, new_markdown_cell
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK_PATH = ROOT / 'notebooks' / '01_data_audit.ipynb'
+DESIRED_SECTION_ORDER = [
+    '## Module 1. Imports and Notebook Setup',
+    '## Module 2. Paths and Output Layout',
+    '## Module 3. Audit Configuration and Thresholds',
+    '## Module 4. Dataset, Metadata, and Actual File Inventory',
+    '## Module 4A. Actual Data Validation and Ordering Resolution',
+    '## Module 6. Image Loading, Resize, and Image-Level Metrics',
+    '## Module 6A. Image-Level Flags and Preprocess Outlook',
+    '## Module 7. Feature Extraction and Pair Geometry',
+    '## Module 7A. Orientation Audit and Transform Sanity',
+    '## Module 8. Pair Scoring, Failure Logic, and Preprocessing Recommendations',
+    '## Module 9. Result Schemas',
+    '## Module 11. Scene Audit Runner',
+    '## Module 12. Run the Audit on All Scenes',
+    '## Module 13. Summary Tables',
+    '## Module 13A. Failure Case Examples',
+    '## Module 14. Diagnostic Plots',
+    '## Module 15. Inspect One Scene Manually',
+    '## Suggested Interpretation',
+]
+
+
+def unwrap_self_nested_code(source: str) -> str:
+    lines = source.splitlines()
+    while len(lines) >= 2:
+        first = lines[0].rstrip()
+        second = lines[1].rstrip()
+        if not lines[1].startswith('    '):
+            break
+        if first.strip() != second.strip():
+            break
+        lines = [
+            line[4:] if line.startswith('    ') else line
+            for line in lines[1:]
+        ]
+    return '\n'.join(lines).strip() + '\n'
+
+
+def top_level_title(cell) -> str | None:
+    if cell.cell_type != 'markdown':
+        return None
+    source = (cell.source or '').strip()
+    if not source:
+        return None
+    first = source.splitlines()[0].strip()
+    if first.startswith('## '):
+        return first
+    return None
+
+
+def dedupe_titled_sections(cells: list) -> list:
+    sections: list[tuple[str | None, list]] = []
+    current_title: str | None = None
+    current_cells: list = []
+
+    for cell in cells:
+        title = top_level_title(cell)
+        if title is not None and current_cells:
+            sections.append((current_title, current_cells))
+            current_cells = [cell]
+            current_title = title
+        else:
+            if not current_cells:
+                current_title = title
+            current_cells.append(cell)
+
+    if current_cells:
+        sections.append((current_title, current_cells))
+
+    last_seen = {
+        title: idx
+        for idx, (title, _) in enumerate(sections)
+        if title is not None and title.startswith('## Module')
+    }
+
+    deduped: list = []
+    for idx, (title, section_cells) in enumerate(sections):
+        if title is not None and title.startswith('## Module') and last_seen.get(title) != idx:
+            continue
+        deduped.extend(section_cells)
+    return deduped
+
+
+def reorder_sections(cells: list) -> list:
+    preamble: list = []
+    sections: list[tuple[str | None, list]] = []
+    current_title: str | None = None
+    current_cells: list = []
+    seen_first_title = False
+
+    for cell in cells:
+        title = top_level_title(cell)
+        if title is not None:
+            if not seen_first_title and current_cells:
+                preamble.extend(current_cells)
+                current_cells = []
+            elif current_cells:
+                sections.append((current_title, current_cells))
+                current_cells = []
+            seen_first_title = True
+            current_title = title
+        current_cells.append(cell)
+
+    if current_cells:
+        if seen_first_title:
+            sections.append((current_title, current_cells))
+        else:
+            preamble.extend(current_cells)
+
+    last_section_by_title: dict[str, list] = {}
+    ordered_unknown_titles: list[str] = []
+    for title, section_cells in sections:
+        if title is None:
+            continue
+        last_section_by_title[title] = section_cells
+        if title not in DESIRED_SECTION_ORDER and title not in ordered_unknown_titles:
+            ordered_unknown_titles.append(title)
+
+    rebuilt = list(preamble)
+    for title in DESIRED_SECTION_ORDER:
+        if title in last_section_by_title:
+            rebuilt.extend(last_section_by_title[title])
+    for title in ordered_unknown_titles:
+        rebuilt.extend(last_section_by_title[title])
+    return rebuilt
 
 
 def patch_notebook() -> None:
     nb = nbformat.read(NOTEBOOK_PATH, as_version=4)
     original_cells = nb.cells
     new_cells = []
+    injected_section_titles = {
+        '## Module 4A. Actual Data Validation and Ordering Resolution',
+        '## Module 13A. Failure Case Examples',
+    }
+    skip_following_code = False
 
     for idx, cell in enumerate(original_cells):
+        if skip_following_code and cell.cell_type == 'code':
+            skip_following_code = False
+            continue
+
+        if cell.cell_type == 'markdown':
+            source = (cell.source or '').strip()
+            if any(source.startswith(title) for title in injected_section_titles):
+                skip_following_code = True
+                continue
+            if source.startswith('## Module 14. Diagnostic Plots'):
+                new_cells.append(new_markdown_cell(dedent('''
+                ## Module 13A. Failure Case Examples
+
+                Section này gom một **scene đại diện rõ nhất** cho từng failure case mà nhóm sẽ phân tích.
+
+                Mục tiêu:
+                - không cần lặp nhiều scene cho cùng một failure mode
+                - giữ failure gallery gọn, dễ nhìn, dễ dùng trong report
+                - ưu tiên các scene đang nằm trong split `failure_analysis`
+                ''').strip() + '\n'))
+                new_cells.append(new_code_cell(dedent('''
+                FAILURE_CASE_EXAMPLES = [
+                    {
+                        'failure_case': 'insufficient_overlap',
+                        'scene_id': 'scene_04',
+                        'why_this_scene': 'pure overlap failure with minimal extra confounds',
+                    },
+                    {
+                        'failure_case': 'global_stitch_failure',
+                        'scene_id': 'scene_08',
+                        'why_this_scene': 'clear global failure despite adjacent evidence',
+                    },
+                    {
+                        'failure_case': 'insufficient_global_connectivity',
+                        'scene_id': 'scene_15',
+                        'why_this_scene': 'chain breaks at global level even though local views exist',
+                    },
+                    {
+                        'failure_case': 'low_texture',
+                        'scene_id': 'scene_11',
+                        'why_this_scene': 'cleanest low-texture failure in the set',
+                    },
+                    {
+                        'failure_case': 'repeated_patterns',
+                        'scene_id': 'scene_13',
+                        'why_this_scene': 'strong repetitive structure causes ambiguous matching',
+                    },
+                    {
+                        'failure_case': 'parallax',
+                        'scene_id': 'scene_14',
+                        'why_this_scene': 'foreground/background geometry shifts clearly across the scan',
+                    },
+                    {
+                        'failure_case': 'sideways_scan',
+                        'scene_id': 'scene_14',
+                        'why_this_scene': 'representative moving-platform capture instead of rotate-in-place panorama',
+                    },
+                    {
+                        'failure_case': 'translation_capture',
+                        'scene_id': 'scene_16',
+                        'why_this_scene': 'deliberate translated capture instead of in-place rotation',
+                    },
+                    {
+                        'failure_case': 'capture_gap',
+                        'scene_id': 'scene_19',
+                        'why_this_scene': 'gap in sequence makes the chain less stable',
+                    },
+                    {
+                        'failure_case': 'moving_objects',
+                        'scene_id': 'scene_35',
+                        'why_this_scene': 'dynamic traffic is obvious and easy to explain visually',
+                    },
+                    {
+                        'failure_case': 'motion_blur',
+                        'scene_id': 'scene_35',
+                        'why_this_scene': 'night blur is visually obvious and easy to connect to weak matching',
+                    },
+                    {
+                        'failure_case': 'wide_sweep',
+                        'scene_id': 'scene_21',
+                        'why_this_scene': 'large sweep with difficult global consistency',
+                    },
+                    {
+                        'failure_case': 'exposure_change',
+                        'scene_id': 'scene_30',
+                        'why_this_scene': 'clear brightness shift between adjacent frames',
+                    },
+                    {
+                        'failure_case': 'long_chain',
+                        'scene_id': 'scene_22',
+                        'why_this_scene': 'long sequence makes error accumulation easy to discuss',
+                    },
+                    {
+                        'failure_case': 'nonuniform_overlap',
+                        'scene_id': 'scene_22',
+                        'why_this_scene': 'overlap quality changes noticeably across the chain',
+                    },
+                    {
+                        'failure_case': 'stitch_instability',
+                        'scene_id': 'scene_30',
+                        'why_this_scene': 'same scene is stable enough to inspect but unstable enough to discuss output inconsistency',
+                    },
+                    {
+                        'failure_case': 'output_variation',
+                        'scene_id': 'scene_30',
+                        'why_this_scene': 'good representative for visible output changes across repeated runs',
+                    },
+                ]
+
+
+                SPLIT_MANIFEST_PATH = PROJECT_ROOT / 'data' / 'split' / 'split_manifest.json'
+
+
+                def load_split_manifest(path: Path) -> dict:
+                    if not path.exists():
+                        return {}
+                    return json.loads(path.read_text(encoding='utf-8'))
+
+
+                def show_scene_preview_row(scene_id: str, represented_cases: list[str], max_images: int = 3) -> None:
+                    scene_dir = DATA_ROOT / scene_id
+                    files = list_image_files(scene_dir)
+                    if not files:
+                        print(f'No ordered images found for {scene_id}')
+                        return
+
+                    preview_files = files[:max_images]
+                    fig, axes = plt.subplots(1, len(preview_files), figsize=(4 * len(preview_files), 3.2))
+                    if len(preview_files) == 1:
+                        axes = [axes]
+
+                    for ax, path in zip(axes, preview_files):
+                        image_bgr = load_bgr(path, max_long_edge=900)
+                        ax.imshow(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+                        ax.set_title(path.name)
+                        ax.axis('off')
+
+                    suffix = ''
+                    if len(files) > len(preview_files):
+                        suffix = f' (+{len(files) - len(preview_files)} more images)'
+                    fig.suptitle(f"{scene_id}: {', '.join(represented_cases)}{suffix}", fontsize=12)
+                    plt.tight_layout()
+                    plt.show()
+
+
+                split_manifest = load_split_manifest(SPLIT_MANIFEST_PATH)
+                failure_split_scene_ids = set(split_manifest.get('splits', {}).get('failure_analysis', []))
+
+                example_rows = []
+                for item in FAILURE_CASE_EXAMPLES:
+                    scene_id = item['scene_id']
+                    meta = load_scene_meta_file(DATA_ROOT / scene_id) or {}
+                    example_rows.append(
+                        {
+                            'failure_case': item['failure_case'],
+                            'scene_id': scene_id,
+                            'meta_category': meta.get('category'),
+                            'meta_difficulty': meta.get('difficulty'),
+                            'scene_issues': ', '.join(meta.get('issues', [])),
+                            'in_failure_split': scene_id in failure_split_scene_ids,
+                            'why_this_scene': item['why_this_scene'],
+                        }
+                    )
+
+                print('Representative failure-case scenes:')
+                display(pd.DataFrame(example_rows))
+
+                print('\\nVisual gallery of representative scenes:')
+                unique_scene_ids = []
+                for item in FAILURE_CASE_EXAMPLES:
+                    if item['scene_id'] not in unique_scene_ids:
+                        unique_scene_ids.append(item['scene_id'])
+
+                for scene_id in unique_scene_ids:
+                    represented_cases = [item['failure_case'] for item in FAILURE_CASE_EXAMPLES if item['scene_id'] == scene_id]
+                    show_scene_preview_row(scene_id, represented_cases, max_images=3)
+                ''').strip() + '\n'))
+
+        if cell.cell_type == 'code':
+            source = cell.source or ''
+            if 'def scene_repairability_label' in source and 'def audit_vs_opencv_label' not in source:
+                cell.source = source.rstrip() + '\n\n\ndef audit_vs_opencv_label(scene_label: str, opencv_status: str | None) -> str:\n' \
+                    + "    if not opencv_status:\n" \
+                    + "        return 'no_opencv_log'\n" \
+                    + "    if scene_label == 'likely_good' and opencv_status != 'OK':\n" \
+                    + "        return 'audit_more_optimistic'\n" \
+                    + "    if scene_label == 'borderline' and opencv_status == 'OK':\n" \
+                    + "        return 'aligned_ok_with_risk'\n" \
+                    + "    if scene_label == 'likely_fail' and opencv_status == 'OK':\n" \
+                    + "        return 'audit_more_conservative'\n" \
+                    + "    if scene_label == 'borderline':\n" \
+                    + "        return 'needs_manual_judgment'\n" \
+                    + "    return 'aligned'\n"
+
         if idx == 1 and cell.cell_type == 'markdown':
             cell.source = dedent('''
             ## Module 1. Imports and Notebook Setup
@@ -1068,6 +1392,20 @@ def patch_notebook() -> None:
                 if scene_label == 'borderline':
                     return 'partially_repairable'
                 return 'likely_preprocessable'
+
+
+            def audit_vs_opencv_label(scene_label: str, opencv_status: str | None) -> str:
+                if not opencv_status:
+                    return 'no_opencv_log'
+                if scene_label == 'likely_good' and opencv_status != 'OK':
+                    return 'audit_more_optimistic'
+                if scene_label == 'borderline' and opencv_status == 'OK':
+                    return 'aligned_ok_with_risk'
+                if scene_label == 'likely_fail' and opencv_status == 'OK':
+                    return 'audit_more_conservative'
+                if scene_label == 'borderline':
+                    return 'needs_manual_judgment'
+                return 'aligned'
             ''').strip() + '\n'
 
         if idx == 17 and cell.cell_type == 'markdown':
@@ -1187,21 +1525,6 @@ def patch_notebook() -> None:
         if idx == 22 and cell.cell_type == 'code':
             cell.source = dedent('''
             def audit_scene(scene_dir: Path, feature_method=PRIMARY_FEATURE_METHOD, save_visuals=SAVE_VISUALS):
-                audit_vs_opencv_fn = globals().get('audit_vs_opencv_label')
-                if audit_vs_opencv_fn is None:
-                    def audit_vs_opencv_fn(scene_label: str, opencv_status: str | None):
-                        if not opencv_status:
-                            return 'no_opencv_log'
-                        if scene_label == 'likely_good' and opencv_status != 'OK':
-                            return 'audit_more_optimistic'
-                        if scene_label == 'borderline' and opencv_status == 'OK':
-                            return 'aligned_ok_with_risk'
-                        if scene_label == 'likely_fail' and opencv_status == 'OK':
-                            return 'audit_more_conservative'
-                        if scene_label == 'borderline':
-                            return 'needs_manual_judgment'
-                        return 'aligned'
-
                 scene_context = summarize_inventory(scene_dir)
                 inventory = validate_scene_inventory(scene_dir)
                 image_files = inventory['ordered_files']
@@ -1396,7 +1719,7 @@ def patch_notebook() -> None:
                     'scene_repairability': scene_repairability,
                     'ordered_files_used': json.dumps([path.name for path in image_files]),
                     'reference_files_excluded': json.dumps([path.name for path in reference_files]),
-                    'audit_vs_opencv': audit_vs_opencv_fn(scene_label, scene_context.get('opencv_status_name')),
+                    'audit_vs_opencv': audit_vs_opencv_label(scene_label, scene_context.get('opencv_status_name')),
                 }
 
                 return image_rows, pair_rows, skip_pair_rows, scene_row
@@ -1755,6 +2078,12 @@ def patch_notebook() -> None:
             ''').strip() + '\n'
 
         new_cells.append(cell)
+
+    new_cells = dedupe_titled_sections(new_cells)
+    new_cells = reorder_sections(new_cells)
+    for cell in new_cells:
+        if cell.cell_type == 'code':
+            cell.source = unwrap_self_nested_code(cell.source or '')
 
     nb.cells = new_cells
     nbformat.write(nb, NOTEBOOK_PATH)

@@ -29,6 +29,30 @@ def patch_opencv_notebook(path: Path) -> None:
 
     replacements = [
         (
+            lambda cell, source: cell.get("cell_type") == "code" and "from pathlib import Path" in source and "import cv2" in source,
+            """from pathlib import Path
+import sys
+import json
+import gc
+from datetime import datetime
+
+import cv2
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from IPython.display import display, Markdown
+
+# OpenCV Stitcher can crash the notebook kernel on some scenes when OpenCL stays enabled.
+# We disable it up front so hard scenes fail gracefully with a status code instead of killing Python.
+cv2.ocl.setUseOpenCL(False)
+
+plt.rcParams["figure.figsize"] = (14, 6)
+plt.rcParams["axes.grid"] = False
+
+print("OpenCL enabled:", cv2.ocl.useOpenCL())
+""",
+        ),
+        (
             lambda cell, source: cell.get("cell_type") == "markdown" and "## Module 3: Dataset Inventory" in source,
             """## Module 3: Dataset Inventory
 
@@ -41,6 +65,32 @@ Bảng sẽ hiển thị:
 - trạng thái snapshot hiện tại trong `meta.json`
 - `ok_rate`, `stability_label`, `output_consistent`
 - mục đích sử dụng của scene
+""",
+        ),
+        (
+            lambda cell, source: cell.get("cell_type") == "markdown" and "## Module 4: User Config" in source,
+            """## Module 4: User Config
+
+Sau khi xem bảng inventory ở trên, bạn chỉnh cell này để chọn scene muốn test.
+
+- `SCENE_ID`: scene muốn chạy thử
+- `MAX_INPUT_WIDTH`: resize input trước khi đưa cho Stitcher
+- `STITCHER_MODE`: giữ `PANORAMA` nếu bạn muốn chạy baseline panorama nhất quán trên toàn bộ dataset
+- `RUN_ALL_SCENES`: nếu `True`, notebook sẽ chạy toàn bộ dataset bằng đúng mode đang chọn
+
+Gợi ý dùng:
+- chạy benchmark chính: `STITCHER_MODE = "PANORAMA"`
+- chỉ dùng `SCANS` ở một lượt so sánh riêng, không dùng để "cứu" các scene khó trong benchmark panorama
+""",
+        ),
+        (
+            lambda cell, source: cell.get("cell_type") == "code" and "SCENE_ID =" in source and "STITCHER_MODE =" in source and "RUN_ALL_SCENES =" in source,
+            """SCENE_ID = "scene_38"
+MAX_INPUT_WIDTH = 3000
+STITCHER_MODE = "PANORAMA"  # keep this as the main baseline; use "SCANS" only for separate comparison runs
+SAVE_OUTPUTS = True
+RUN_ALL_SCENES = True
+SHOW_INPUT_STRIP = True
 """,
         ),
         (
@@ -181,6 +231,10 @@ display(scene_table)
         print("Reference files excluded from stitch chain:", [path.name for path in reference_files])
 
     summary["log_path"] = str(log_path)
+    del images_for_stitcher
+    del panorama
+    del panorama_rgb
+    gc.collect()
     return summary
 """,
         ),
@@ -227,6 +281,7 @@ display(pd.DataFrame(single_result["pair_diagnostics"]))
         (
             lambda cell, source: cell.get("cell_type") == "code" and "if RUN_ALL_SCENES:" in source and "batch_rows" in source,
             """if RUN_ALL_SCENES:
+    print(f"Running all scenes with STITCHER_MODE={STITCHER_MODE} ...")
     batch_rows = []
     for scene_id in scene_table["scene_id"]:
         print(f"Running {scene_id} ...")
@@ -253,6 +308,8 @@ display(pd.DataFrame(single_result["pair_diagnostics"]))
                 "log_path": result["log_path"],
             }
         )
+        del result
+        gc.collect()
 
     batch_df = pd.DataFrame(batch_rows).sort_values(
         ["status_code", "meta_ok_rate", "scene_id"],
