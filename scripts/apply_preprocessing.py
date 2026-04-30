@@ -6,6 +6,17 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = PROJECT_ROOT / "data"
+RAW_ROOT = DATA_ROOT / "raw"
+SPLIT_ROOT = DATA_ROOT / "split"
+PREPROCESSING_ROOT = DATA_ROOT / "preprocessing"
+SPLIT_ALIASES = {
+    "development": "development",
+    "test": "test",
+    "failure": "failure_analysis",
+    "failure_analysis": "failure_analysis",
+    "split": "split",
+}
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -45,6 +56,9 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  python scripts/apply_preprocessing.py\n"
+            "  python scripts/apply_preprocessing.py --split development\n"
+            "  python scripts/apply_preprocessing.py --split failure_analysis --ordered-only\n"
+            "  python scripts/apply_preprocessing.py --split split --ordered-only\n"
             "  python scripts/apply_preprocessing.py --scene scene_04 --scene scene_21\n"
             "  python scripts/apply_preprocessing.py --image scene_04/img_01.jpg --image scene_30/img_03.jpg\n"
             "  python scripts/apply_preprocessing.py --skip-scene scene_14 --skip-image scene_29/img_08.jpg\n"
@@ -55,14 +69,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--root",
         type=Path,
-        default=PROJECT_ROOT / "data" / "raw",
-        help="Root folder containing scene directories.",
+        default=None,
+        help="Root folder containing scene directories. Use this for custom roots; otherwise use --split or the default raw dataset.",
+    )
+    parser.add_argument(
+        "--split",
+        choices=sorted(SPLIT_ALIASES.keys()),
+        help="Select one split under data/split, or 'split' for the whole split dataset. Accepts 'failure' as an alias for 'failure_analysis'.",
     )
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=PROJECT_ROOT / "data" / "preprocessed",
-        help="Destination root where processed outputs will be written.",
+        default=None,
+        help="Destination root where processed outputs will be written. Defaults to data/preprocessing/<scope>.",
     )
     parser.add_argument(
         "--scene",
@@ -127,6 +146,82 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def resolve_dataset_root(args) -> Path:
+    if args.root is not None and args.split is not None:
+        raise ValueError("Use either --root or --split, not both.")
+
+    if args.root is not None:
+        dataset_root = args.root.resolve()
+    elif args.split is not None:
+        split_name = SPLIT_ALIASES[args.split]
+        if split_name == "split":
+            dataset_root = SPLIT_ROOT.resolve()
+        else:
+            dataset_root = (SPLIT_ROOT / split_name).resolve()
+    else:
+        dataset_root = RAW_ROOT.resolve()
+
+    if not dataset_root.exists():
+        raise FileNotFoundError(f"Root folder not found: {dataset_root}")
+
+    return dataset_root
+
+
+def default_output_root(dataset_root: Path, selected_split: str | None) -> Path:
+    if selected_split is not None:
+        return (PREPROCESSING_ROOT / SPLIT_ALIASES[selected_split]).resolve()
+
+    raw_root = RAW_ROOT.resolve()
+    split_root = SPLIT_ROOT.resolve()
+    if dataset_root == raw_root:
+        return (PREPROCESSING_ROOT / "raw").resolve()
+
+    try:
+        relative = dataset_root.relative_to(split_root)
+    except ValueError:
+        relative = None
+
+    if relative is not None and len(relative.parts) == 1:
+        return (PREPROCESSING_ROOT / relative.parts[0]).resolve()
+
+    return (PREPROCESSING_ROOT / dataset_root.name).resolve()
+
+
+def is_split_root(root: Path) -> bool:
+    return root.resolve() == SPLIT_ROOT.resolve()
+
+
+def scene_dirs_for_root(root: Path) -> list[Path]:
+    if is_split_root(root):
+        scene_dirs: list[Path] = []
+        for split_dir in list_scene_dirs(root):
+            scene_dirs.extend(list_scene_dirs(split_dir))
+        return sorted(scene_dirs, key=lambda path: (path.parent.name, path.name))
+    return list_scene_dirs(root)
+
+
+def resolve_scene_dir(root: Path, scene_name: str) -> Path:
+    direct = (root / scene_name).resolve()
+    if direct.exists() and direct.is_dir():
+        return direct
+
+    if is_split_root(root):
+        matches = []
+        for split_dir in list_scene_dirs(root):
+            candidate = (split_dir / scene_name).resolve()
+            if candidate.exists() and candidate.is_dir():
+                matches.append(candidate)
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ValueError(
+                f"Scene name is ambiguous under data/split: {scene_name}. "
+                "Use --image with an explicit split path, or select one split with --split."
+            )
+
+    raise FileNotFoundError(f"Scene not found: {scene_name}")
+
+
 def resolve_image_arg(root: Path, raw_value: str) -> Path:
     candidate = Path(raw_value)
     options = []
@@ -135,6 +230,9 @@ def resolve_image_arg(root: Path, raw_value: str) -> Path:
     else:
         options.append(root / candidate)
         options.append(PROJECT_ROOT / candidate)
+        if is_split_root(root):
+            for split_dir in list_scene_dirs(root):
+                options.append(split_dir / candidate)
 
     for option in options:
         resolved = option.resolve()
@@ -145,9 +243,7 @@ def resolve_image_arg(root: Path, raw_value: str) -> Path:
 
 
 def collect_scene_images(root: Path, scene_name: str, ordered_only: bool) -> list[Path]:
-    scene_dir = (root / scene_name).resolve()
-    if not scene_dir.exists() or not scene_dir.is_dir():
-        raise FileNotFoundError(f"Scene not found: {scene_name}")
+    scene_dir = resolve_scene_dir(root, scene_name)
     if ordered_only:
         ordered, _, _, _ = ordered_scene_files(scene_dir)
         return ordered
@@ -156,8 +252,6 @@ def collect_scene_images(root: Path, scene_name: str, ordered_only: bool) -> lis
 
 def collect_target_images(args) -> list[Path]:
     root = args.root.resolve()
-    if not root.exists():
-        raise FileNotFoundError(f"Root folder not found: {root}")
 
     skip_scene_names = set(args.skip_scenes or [])
     skip_image_paths = {resolve_image_arg(root, value).resolve() for value in (args.skip_images or [])}
@@ -169,7 +263,7 @@ def collect_target_images(args) -> list[Path]:
     process_everything = not explicit_scenes and not explicit_images
 
     if process_everything:
-        for scene_dir in list_scene_dirs(root):
+        for scene_dir in scene_dirs_for_root(root):
             if scene_dir.name in skip_scene_names:
                 continue
             scene_files = collect_scene_images(root, scene_dir.name, args.ordered_only)
@@ -236,6 +330,40 @@ def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def write_image_or_raise(path: Path, image) -> None:
+    ensure_parent(path)
+    if not cv2.imwrite(str(path), image):
+        raise OSError(f"Could not write image: {path}")
+
+
+def audit_lookup_candidates(image_path: Path) -> list[Path]:
+    resolved = image_path.resolve()
+    candidates = [resolved]
+
+    split_root = SPLIT_ROOT.resolve()
+    try:
+        relative = resolved.relative_to(split_root)
+    except ValueError:
+        relative = None
+
+    if relative is not None and len(relative.parts) >= 2:
+        raw_candidate = (RAW_ROOT.resolve() / Path(*relative.parts[1:])).resolve()
+        candidates.append(raw_candidate)
+
+    return candidates
+
+
+def resolve_recommendations(
+    image_path: Path,
+    audit_recommendations: dict[Path, set[str]],
+) -> set[str]:
+    for candidate in audit_lookup_candidates(image_path):
+        recommendations = audit_recommendations.get(candidate)
+        if recommendations is not None:
+            return recommendations
+    return set()
+
+
 def write_manifest(manifest_path: Path, rows: list[dict[str, str]]) -> None:
     if not rows:
         return
@@ -265,8 +393,9 @@ def main() -> int:
             "Install requirements.txt first, then rerun the command."
         )
 
-    dataset_root = args.root.resolve()
-    output_root = args.output_root.resolve()
+    dataset_root = resolve_dataset_root(args)
+    args.root = dataset_root
+    output_root = args.output_root.resolve() if args.output_root is not None else default_output_root(dataset_root, args.split)
 
     target_images = collect_target_images(args)
     if not target_images:
@@ -284,7 +413,7 @@ def main() -> int:
     skipped_count = 0
 
     for image_path in target_images:
-        recommendations = audit_recommendations.get(image_path.resolve(), set())
+        recommendations = resolve_recommendations(image_path, audit_recommendations)
         if args.skip_drop_recommended and recommendations & DROP_RECOMMENDATIONS:
             skipped_count += 1
             print(f"SKIP {image_path.relative_to(dataset_root)}  audit={sorted(recommendations)}")
@@ -319,13 +448,11 @@ def main() -> int:
 
         if gray_result is not None:
             gray_path = out_paths["gray"]
-            ensure_parent(gray_path)
-            cv2.imwrite(str(gray_path), gray_result["final"])
+            write_image_or_raise(gray_path, gray_result["final"])
 
         if color_result is not None:
             color_path = out_paths["color"]
-            ensure_parent(color_path)
-            cv2.imwrite(str(color_path), color_result["final"])
+            write_image_or_raise(color_path, color_result["final"])
 
         manifest_rows.append(
             {

@@ -129,6 +129,12 @@ def unsharp_mask(gray_img: np.ndarray, sigma: float = 1.0, amount: float = 0.8) 
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 
+def unsharp_mask_color(image_bgr: np.ndarray, sigma: float = 1.0, amount: float = 0.8) -> np.ndarray:
+    blurred = cv2.GaussianBlur(image_bgr, (0, 0), sigmaX=sigma)
+    sharpened = cv2.addWeighted(image_bgr, 1.0 + amount, blurred, -amount, 0)
+    return np.clip(sharpened, 0, 255).astype(np.uint8)
+
+
 def preprocess_feature_image(
     image_bgr: np.ndarray,
     config: PreprocessConfig | None = None,
@@ -203,11 +209,23 @@ def preprocess_color_image(
     config: PreprocessConfig | None = None,
 ) -> dict[str, object]:
     cfg = config or PreprocessConfig()
-    resized_bgr = resize_keep_aspect(image_bgr, cfg.max_width)
-    lab = cv2.cvtColor(resized_bgr, cv2.COLOR_BGR2LAB)
-    l_channel, a_channel, b_channel = cv2.split(lab)
+    working_bgr = resize_keep_aspect(image_bgr, cfg.max_width)
 
     applied_steps: list[str] = []
+    if cfg.enable_denoise:
+        working_bgr = cv2.fastNlMeansDenoisingColored(
+            working_bgr,
+            None,
+            h=cfg.denoise_strength,
+            hColor=cfg.denoise_strength,
+            templateWindowSize=7,
+            searchWindowSize=21,
+        )
+        applied_steps.append(f"denoise_color:h={cfg.denoise_strength}")
+
+    lab = cv2.cvtColor(working_bgr, cv2.COLOR_BGR2LAB)
+    l_channel, a_channel, b_channel = cv2.split(lab)
+
     gamma = 1.0
     if cfg.enable_brightness_normalization:
         gamma = estimate_auto_gamma(
@@ -232,6 +250,10 @@ def preprocess_color_image(
 
     merged_lab = cv2.merge([l_channel, a_channel, b_channel])
     final_bgr = cv2.cvtColor(merged_lab, cv2.COLOR_LAB2BGR)
+    if cfg.enable_unsharp:
+        final_bgr = unsharp_mask_color(final_bgr, sigma=cfg.unsharp_sigma, amount=cfg.unsharp_amount)
+        applied_steps.append(f"unsharp:{cfg.unsharp_amount:.2f}")
+
     return {
         "final": final_bgr,
         "applied_steps": applied_steps,
