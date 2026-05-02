@@ -1,172 +1,134 @@
 # Panorama Stitching Project
 
-Repo này dùng để tổ chức dataset panorama, audit overlap/matching, và thử nghiệm stitching theo 2 hướng:
-- `OpenCV Stitcher` để có baseline nhanh
-- `manual projection previews` để debug footprint, coverage, và các scene quét rộng
+This repository contains the implementation and experimental report materials for a classical panorama stitching pipeline. The project studies how local feature detectors, descriptors, matching, geometric verification, warping, and blending affect panorama quality across easy, difficult, and failure-oriented scenes.
 
-## Current Structure
+## Project Scope
+
+The current project stage covers:
+
+- dataset organization and scene metadata
+- image quality and overlap audit
+- preprocessing for feature extraction
+- single-scene feature/descriptor case study
+- OpenCV Stitcher baseline
+- manual projection previews for geometry analysis
+
+The full-dataset feature, matching, stitching, and evaluation batches will be built on top of the existing scripts.
+
+## Repository Structure
 
 ```text
-data/raw/
-  scene_XX/
-    img_001.jpg
-    img_002.jpg
-    ...
-    meta.json
+data/
+  raw/                         original scene folders with meta.json
+  split/                       development, test, and failure-analysis splits
+  preprocessing/               saved preprocessing outputs
 
 notebooks/
   01_data_audit.ipynb
+  02_preprocessing_and_feature_engineering.ipynb
+  03_feature_descriptor_case_study.ipynb
   06_opencv_scene_stitcher.ipynb
   07_manual_projection_previews.ipynb
 
 project_utils/
-  panorama_dataset.py
+  panorama_dataset.py          dataset and metadata helpers
+  preprocessing.py             reusable preprocessing functions
 
 scripts/
-  rename_scene_images.py
-  regenerate_scene_meta.py
-  validate_dataset.py
-  generate_opencv_overlay.py
+  apply_preprocessing.py       batch preprocessing
+  extract_features.py          batch feature/descriptor extraction
+  generate_opencv_overlay.py   visualization for OpenCV panorama placement
+  regenerate_scene_meta.py     scene metadata and audit regeneration
+  rename_scene_images.py       dataset image naming utility
+  validate_dataset.py          dataset consistency checks
 ```
 
-`outputs/` và `notebooks/outputs/` đang được ignore trong Git. Chúng vẫn được notebook/script tạo ra cục bộ khi cần.
+`data/` and `outputs/` are ignored by Git because they contain local datasets and generated experiment artifacts.
 
-## Recommended Workflow
+## Notebook Order
 
-### 1. Rename images inside a scene
+1. `01_data_audit.ipynb`  
+   Audits scene quality, overlap, image statistics, keypoints, pair matches, and failure indicators.
 
-Đổi tên ảnh theo chuẩn `img_xxx` dựa trên suffix số cuối của filename gốc.
+2. `02_preprocessing_and_feature_engineering.ipynb`  
+   Documents preprocessing concepts and the saved preprocessing pipeline used before feature extraction.
+
+3. `03_feature_descriptor_case_study.ipynb`  
+   Compares SIFT, ORB, Harris + ORB, Harris + HOG, AKAZE, and BRISK on one preprocessed scene pair.
+
+4. `06_opencv_scene_stitcher.ipynb`  
+   Runs the OpenCV Stitcher baseline and records panorama outputs and logs.
+
+5. `07_manual_projection_previews.ipynb`  
+   Shows manual homography-chain and cylindrical projection previews for geometry analysis.
+
+## Reproducible Commands
+
+Run these commands from the project root. The project environment used for notebooks is `image_recognition`.
+
+### Validate Dataset
 
 ```powershell
-python scripts/rename_scene_images.py data/raw/scene_22 --dry-run
-python scripts/rename_scene_images.py data/raw/scene_22
+conda run -n image_recognition python scripts\validate_dataset.py
+conda run -n image_recognition python scripts\validate_dataset.py --verify-images
 ```
 
-Ví dụ:
-- `20260411_140944_001.jpg -> img_001.jpg`
-- `20260411_140944_030.jpg -> img_030.jpg`
-
-### 2. Regenerate metadata for all scenes
-
-Script này:
-- đọc `ordered_files` theo `meta.json` nếu có
-- fallback sang thứ tự `img_001`, `img_002`, ...
-- tính lại `image_stats`, `pair_audit`, `audit_summary`
-- chạy `cv2.Stitcher` nhiều lần để tạo `stability_check`
-- giữ lại các trường thủ công như `category`, `difficulty`, `issues`, `notes`
+### Apply Preprocessing
 
 ```powershell
-python scripts/regenerate_scene_meta.py
-python scripts/regenerate_scene_meta.py --scene scene_16 --stability-runs 12
+conda run -n image_recognition python scripts\apply_preprocessing.py --split development --ordered-only
+conda run -n image_recognition python scripts\apply_preprocessing.py --split test --ordered-only
+conda run -n image_recognition python scripts\apply_preprocessing.py --split failure --ordered-only
 ```
 
-### 3. Validate dataset consistency
+Preprocessed feature images are written to:
 
-Script này kiểm:
-- `scene_id`
-- `ordered_files`
-- `reference_files`
-- `num_images`
-- `image_stats`
-- `pair_audit`
-- `pair_label_counts`
-- `stability_check`
-- cảnh báo các scene có `category` lệch với `stitcher_status`
+```text
+data/preprocessing/<split>/feature_gray/<scene>/
+```
+
+### Extract Features
+
+Run one descriptor on one scene:
 
 ```powershell
-python scripts/validate_dataset.py
-python scripts/validate_dataset.py --verify-images
+conda run -n image_recognition python scripts\extract_features.py --split development --scene scene_03 --descriptor SIFT
 ```
 
-### 4. Run notebooks
-
-Audit dataset:
+Run one descriptor on an entire split:
 
 ```powershell
-jupyter notebook notebooks/01_data_audit.ipynb
+conda run -n image_recognition python scripts\extract_features.py --split development --descriptor SIFT
 ```
 
-OpenCV baseline:
+Run all supported comparison descriptors on a split:
 
 ```powershell
-jupyter notebook notebooks/06_opencv_scene_stitcher.ipynb
+conda run -n image_recognition python scripts\extract_features.py --split development --descriptor all
 ```
 
-Manual debug previews:
+Feature outputs are written to:
 
-```powershell
-jupyter notebook notebooks/07_manual_projection_previews.ipynb
+```text
+data/feature_extract/<split>/<scene>/<descriptor>/
 ```
 
-## Notebook Roles
+## Report Focus
 
-### `01_data_audit.ipynb`
-- audit quality của từng scene
-- xem brightness, blur, keypoints, matches, inliers
-- dùng để tìm scene tốt, scene khó, scene lỗi
+The feature/descriptor case study should be interpreted as a controlled single-scene comparison. It uses already-preprocessed images and does not claim full-dataset performance. The later batch experiments should use the same output structure to summarize performance across development, test, and failure-analysis splits.
 
-### `06_opencv_scene_stitcher.ipynb`
-- chạy `cv2.Stitcher`
-- xuất panorama vào `outputs/openCV/panoramas/`
-- xuất log vào `outputs/openCV/logs/`
-- có thêm overlay để xem input image nào đang nằm ở đâu trong panorama
+Key metrics for stitching quality:
 
-### `07_manual_projection_previews.ipynb`
-- `manual full-canvas preview` để debug planar chain
-- `manual cylindrical preview` để xem scene quét rộng hợp lý hơn
-- xuất preview vào `outputs/manual/panoramas/`
-- xuất log vào `outputs/manual/logs/`
+- RANSAC inliers
+- inlier ratio
+- reprojection error
+- visual alignment
+- ghosting and seam quality
+- runtime
 
-## Metadata Notes
+## Reference Documents
 
-Mỗi `scene_XX/meta.json` hiện có hai nhóm thông tin:
-
-- Tự sinh bằng code:
-  - `ordered_files`
-  - `reference_files`
-  - `num_images`
-  - `capture_span_seconds`
-  - `max_capture_gap_seconds`
-  - `image_stats`
-  - `pair_audit`
-- `audit_summary`
-
-Trong `audit_summary.stability_check` sẽ có:
-- `runs`
-- `status_counts`
-- `ok_rate`
-- `dominant_status`
-- `dominant_rate`
-- `ok_panorama_shape_counts`
-- `dominant_ok_panorama_shape`
-- `dominant_ok_panorama_shape_rate`
-- `ok_panorama_shape_bucket_size`
-- `ok_panorama_shape_bucket_counts`
-- `dominant_ok_panorama_shape_bucket`
-- `dominant_ok_panorama_shape_bucket_rate`
-- `is_output_consistent`
-- `stability_label`
-
-- Đánh giá thủ công:
-  - `type`
-  - `capture_group`
-  - `category`
-  - `difficulty`
-  - `recommended_use`
-  - `issues`
-  - `notes`
-  - các cờ `has_*`
-
-Sau khi thêm scene mới, thứ tự nên là:
-1. rename ảnh về `img_xxx`
-2. chạy `regenerate_scene_meta.py`
-3. chạy `validate_dataset.py`
-4. review tay `category / difficulty / notes` nếu cần
-
-## Notes
-
-- `scene` có thể có thêm `reference_files` ngoài chain chính.
-- `OpenCV Stitcher` có thể trả `OK` nhưng vẫn chỉ giữ một phần scene nếu chain rộng hoặc không ổn định.
-- Với wide scene hoặc scene quay quanh người, `manual cylindrical preview` thường hữu ích hơn `manual full-canvas preview`.
-
-Chi tiết định hướng project và pipeline tổng thể nằm trong [panorama_project_pipeline_guide.md](./panorama_project_pipeline_guide.md).
+- [Project pipeline report](./panorama_pipeline_report.md)
+- [Method comparison report plan](./panorama_method_comparison_report.md)
+- [Project guild PDF](./CV_20_Project_2026_English.pdf)
+- [Local features lab manual](./local_features_lab_manual.pdf)
