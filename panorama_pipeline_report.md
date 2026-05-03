@@ -73,7 +73,7 @@ The audit separates scenes into development, test, and failure-analysis groups.
 
 ## Stage 2: Preprocessing
 
-Notebook: `notebooks/02_preprocessing_and_feature_engineering.ipynb`  
+Notebook: `notebooks/02_preprocessing.ipynb`  
 Script support: `scripts/apply_preprocessing.py`, `project_utils/preprocessing.py`
 
 Preprocessing is performed before the feature/descriptor comparison notebook. The current feature input is:
@@ -94,7 +94,7 @@ The case-study notebook does not run preprocessing again. It consumes the saved 
 
 ## Stage 3: Feature and Descriptor Comparison
 
-Notebook: `notebooks/03_feature_descriptor_case_study.ipynb`  
+Notebook: `notebooks/03_feature_extractor.ipynb`  
 Batch script: `scripts/extract_features.py`
 
 The current single-scene case study compares:
@@ -156,9 +156,15 @@ The final report should judge stitching quality using both numbers and images.
 
 Important numeric metrics:
 
+- median Lowe ratio
+- Lowe pass rate
 - RANSAC inliers
 - inlier ratio
+- inlier Lowe ratio
+- spatial coverage
 - mean or median reprojection error
+- overlap similarity
+- homography sanity
 - runtime
 - success or failure status
 

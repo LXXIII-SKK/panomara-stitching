@@ -25,8 +25,8 @@ data/
 
 notebooks/
   01_data_audit.ipynb
-  02_preprocessing_and_feature_engineering.ipynb
-  03_feature_descriptor_case_study.ipynb
+  02_preprocessing.ipynb
+  03_feature_extractor.ipynb
   06_opencv_scene_stitcher.ipynb
   07_manual_projection_previews.ipynb
 
@@ -50,10 +50,10 @@ scripts/
 1. `01_data_audit.ipynb`  
    Audits scene quality, overlap, image statistics, keypoints, pair matches, and failure indicators.
 
-2. `02_preprocessing_and_feature_engineering.ipynb`  
+2. `02_preprocessing.ipynb`  
    Documents preprocessing concepts and the saved preprocessing pipeline used before feature extraction.
 
-3. `03_feature_descriptor_case_study.ipynb`  
+3. `03_feature_extractor.ipynb`  
    Compares SIFT, ORB, Harris + ORB, Harris + HOG, AKAZE, and BRISK on one preprocessed scene pair.
 
 4. `06_opencv_scene_stitcher.ipynb`  
@@ -119,9 +119,15 @@ The feature/descriptor case study should be interpreted as a controlled single-s
 
 Key metrics for stitching quality:
 
+- median Lowe ratio
+- Lowe pass rate
 - RANSAC inliers
 - inlier ratio
+- inlier Lowe ratio
+- spatial coverage
 - reprojection error
+- overlap similarity
+- homography sanity
 - visual alignment
 - ghosting and seam quality
 - runtime

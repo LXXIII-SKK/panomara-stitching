@@ -36,13 +36,19 @@ Each pipeline should report:
 | Keypoints in image A and image B | Detector coverage |
 | Raw matches | Descriptor matching candidates |
 | Good matches | Matches after ratio filtering |
+| Median Lowe ratio | Descriptor distinctiveness before geometric filtering |
+| Lowe pass rate | Fraction of raw KNN matches that pass the ratio test |
 | RANSAC inliers | Geometrically consistent correspondences |
 | Inlier ratio | Fraction of good matches that support the homography |
+| Inlier Lowe ratio | Descriptor distinctiveness among geometrically valid matches |
+| Spatial coverage | Spread of inlier matches across the image pair |
 | Reprojection error | Alignment error after homography estimation |
+| Overlap similarity | Similarity of the aligned overlap region |
+| Homography sanity | Geometric reasonableness of the estimated warp |
 | Runtime | Computational cost |
 | Visual result | Final usability of the panorama |
 
-The most important stitching metrics are RANSAC inliers, inlier ratio, reprojection error, and final visual quality. A method with many keypoints can still fail if its matches are geometrically inconsistent.
+The most important stitching metrics are RANSAC inliers, inlier ratio, reprojection error, overlap similarity, homography sanity, and final visual quality. Lowe-ratio metrics help explain descriptor distinctiveness before RANSAC. A method with many keypoints can still fail if its matches are ambiguous, spatially clustered, or geometrically inconsistent.
 
 ## Expected Method Behavior
 
@@ -86,9 +92,14 @@ The final report should aggregate:
 
 - average keypoints per image
 - average good matches per adjacent pair
+- median Lowe ratio
+- Lowe pass rate
 - average RANSAC inliers
 - average inlier ratio
+- average spatial coverage
 - average reprojection error
+- average overlap similarity
+- homography sanity rate
 - runtime
 - failure rate by scene difficulty
 
