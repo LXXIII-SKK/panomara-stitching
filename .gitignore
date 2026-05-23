@@ -1,6 +1,12 @@
 # Data will be uploaded to googledrive, no need to upload here
 data/
 
+# Mobile app, not needed to upload
+mobile_app/
+
+# Final report will not be uploaded
+final_report/
+
 # Generated outputs
 outputs/
 notebooks/outputs/

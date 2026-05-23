@@ -14,18 +14,16 @@ For each method, the same preprocessed image pair should be used. This keeps the
 
 ## Feature and Descriptor Pipelines
 
-The current comparison set is:
+The current comparison set is deliberately narrowed to four representative methods: two binary descriptor pipelines and two gradient/float descriptor pipelines.
 
 | Pipeline | Detector | Descriptor | Distance |
 | --- | --- | --- | --- |
-| SIFT | SIFT | SIFT | L2 |
 | ORB | ORB | ORB | Hamming |
-| Harris + ORB | Harris corners | ORB | Hamming |
-| Harris + HOG | Harris corners | HOG-style patch descriptor | L2 |
 | AKAZE | AKAZE | AKAZE binary descriptor | Hamming |
-| BRISK | BRISK | BRISK | Hamming |
+| Harris + HOG | Harris corners | HOG-style patch descriptor | L2 |
+| SIFT | SIFT | SIFT | L2 |
 
-SURF is excluded from the main comparison because the current OpenCV environment does not provide `cv2.xfeatures2d.SURF_create`.
+ORB is the fast binary baseline, while AKAZE is the stronger binary alternative. Harris + HOG is the interpretable classical gradient baseline, while SIFT is the stronger scale-invariant gradient descriptor. Other candidate methods are excluded from the main experiment to keep the comparison focused and easier to explain.
 
 ## Metrics
 
@@ -54,12 +52,10 @@ The most important stitching metrics are RANSAC inliers, inlier ratio, reproject
 
 | Pipeline | Expected Strength | Expected Limitation |
 | --- | --- | --- |
-| SIFT | Stable gradient descriptor, often strong on texture and scale variation | Slower than binary descriptors |
 | ORB | Fast and dense keypoints | More false matches in repeated or low-texture regions |
-| Harris + ORB | Clear corner baseline with binary descriptor | Sensitive to weak corners and scale changes |
-| Harris + HOG | Interpretable classical baseline | Less distinctive than SIFT/AKAZE for stitching |
 | AKAZE | Good balance between stability and speed | Can produce fewer useful points in some scenes |
-| BRISK | Binary descriptor with scale handling | Usually less stable than SIFT/AKAZE in hard scenes |
+| Harris + HOG | Interpretable classical gradient baseline | Less distinctive than SIFT/AKAZE for stitching |
+| SIFT | Stable gradient descriptor, often strong on texture and scale variation | Slower than binary descriptors |
 
 ## Case-Study Report Layout
 
