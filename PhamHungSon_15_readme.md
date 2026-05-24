@@ -45,10 +45,10 @@ Luu y: dataset nop bai chi can `data/split`. Khong can `data/raw`.
 Quy mo du lieu hien tai:
 
 ```text
-Tong cong:          29 scenes, 173 images
-development split: 14 scenes, 93 images
+Tong cong:          31 scenes, 167 images
+development split: 12 scenes, 63 images
 test split:         6 scenes, 36 images
-failure_analysis:   9 scenes, 44 images
+failure_analysis:  13 scenes, 68 images
 ```
 
 ## 3. Cau truc goi nop bai
@@ -143,40 +143,70 @@ Neu muon kiem tra file anh co doc duoc hay khong:
 conda run -n image_recognition python scripts\PhamHungSon_15_validate_dataset.py --verify-images
 ```
 
-### Buoc 2: Tao anh tien xu ly cho feature extraction
+### Buoc 2: Chay data audit truoc khi preprocessing
+
+Mo notebook 01 va chay tat ca cell:
+
+```text
+notebooks/PhamHungSon_15_01_data_audit.ipynb
+```
+
+Notebook nay sinh cac file audit sau:
+
+```text
+outputs/audit/image_metrics.csv
+outputs/audit/pair_metrics.csv
+outputs/audit/scene_metrics.csv
+```
+
+File `outputs/audit/image_metrics.csv` co cot `preprocess_recommendations`. Buoc preprocessing ben duoi dung `--profile audit_auto` de doc cac khuyen nghi nay. Neu bo qua notebook 01, `audit_auto` se fallback ve pipeline baseline.
+
+### Buoc 3: Tao anh tien xu ly cho toan bo split
 
 Pipeline tien xu ly chinh:
 
 ```text
-resize -> grayscale -> Gaussian blur -> CLAHE
+resize -> grayscale -> optional auto-gamma -> Gaussian blur -> CLAHE -> optional sharpening
 ```
 
-Chay cho cac split showcase:
+Chay rieng tung split de output dung layout ma cac buoc sau mong doi:
 
 ```powershell
-conda run -n image_recognition python scripts\PhamHungSon_15_apply_preprocessing.py --split test --ordered-only --profile baseline --output-kind gray --overwrite
-conda run -n image_recognition python scripts\PhamHungSon_15_apply_preprocessing.py --split failure_analysis --ordered-only --profile baseline --output-kind gray --overwrite
+conda run -n image_recognition python scripts\PhamHungSon_15_apply_preprocessing.py --split development --ordered-only --profile audit_auto --output-kind both --overwrite
+conda run -n image_recognition python scripts\PhamHungSon_15_apply_preprocessing.py --split test --ordered-only --profile audit_auto --output-kind both --overwrite
+conda run -n image_recognition python scripts\PhamHungSon_15_apply_preprocessing.py --split failure_analysis --ordered-only --profile audit_auto --output-kind both --overwrite
+```
+
+Khong dung `--split split` cho flow chinh neu cac buoc sau doc `data/preprocessing/<split>/...`, vi cach do ghi vao scope `data/preprocessing/split/...`.
+
+Rieng `failure_analysis/scene_18` la scene toi. De tao ban de nhin ro hon, co the chay them mot pass manh hon sau lenh failure_analysis:
+
+```powershell
+conda run -n image_recognition python scripts\PhamHungSon_15_apply_preprocessing.py --split failure_analysis --scene scene_18 --ordered-only --profile audit_auto --output-kind both --gamma-min 0.35 --target-brightness 155 --clahe-clip-limit 3.0 --overwrite
 ```
 
 Output:
 
 ```text
 data/preprocessing/<split>/feature_gray/<scene>/img_XX.png
+data/preprocessing/<split>/color_enhanced/<scene>/img_XX.png
 data/preprocessing/<split>/preprocess_manifest.csv
 ```
 
-### Buoc 3: Trich xuat descriptor bang script
+`feature_gray` la input cho feature extraction. `color_enhanced` chi de xem/debug/report, khong bat buoc cho matching.
 
-Chay tat ca descriptor cho scene case-study:
+### Buoc 4: Trich xuat descriptor cho toan bo split
+
+Chay tat ca descriptor cho tat ca split hien tai:
 
 ```powershell
-conda run -n image_recognition python scripts\PhamHungSon_15_extract_features.py --split failure_analysis --scene scene_14 --descriptor all --overwrite
+conda run -n image_recognition python scripts\PhamHungSon_15_extract_features.py --split all --descriptor all --overwrite
 ```
 
-Chay mot descriptor cho ca split:
+Neu chi muon test nhanh mot scene:
 
 ```powershell
-conda run -n image_recognition python scripts\PhamHungSon_15_extract_features.py --split test --descriptor SIFT --overwrite
+conda run -n image_recognition python scripts\PhamHungSon_15_extract_features.py --split failure_analysis --scene scene_32 --descriptor all --overwrite
 ```
 
 Output:
@@ -196,66 +226,102 @@ SIFT
 
 Nhom da rut gon thuc nghiem chinh con 4 method dai dien: ORB la binary baseline nhanh, AKAZE la binary descriptor manh hon, Harris + HOG la baseline gradient de giai thich, va SIFT la descriptor gradient manh hon.
 
-## 6. Thu tu chay notebook
+### Buoc 5: Chay batch matching/RANSAC
 
-Nen chay theo thu tu sau:
+Mo notebook 04 va chay tat ca cell:
 
-1. `notebooks/PhamHungSon_15_01_data_audit.ipynb`
+```text
+notebooks/PhamHungSon_15_04_batch_feature_matching.ipynb
+```
 
-   Audit dataset trong `data/split`: so luong anh, metadata, blur, contrast, keypoints, matches, RANSAC inliers, reprojection error, overlap va cac dau hieu failure.
+Notebook 04 doc feature cache tu `data/feature_extract/...` va sinh:
 
-2. `notebooks/PhamHungSon_15_02_preprocessing.ipynb`
+```text
+outputs/batch_feature_matching/pair_metrics.csv
+outputs/batch_feature_matching/scene_method_summary.csv
+outputs/batch_feature_matching/method_summary.csv
+outputs/batch_feature_matching/plots/
+```
 
-   Trinh bay va minh hoa preprocessing. Notebook co cell demo tung buoc: resize, grayscale, Gaussian blur, CLAHE, global histogram equalization, denoising va sharpening. Notebook nay mang tinh giai thich; de sinh file preprocessing cho pipeline, dung script o Buoc 2.
+`pair_metrics.csv` duoc manual stitcher dung khi chay voi `--use-batch-metrics`.
 
-3. `notebooks/PhamHungSon_15_03_feature_extractor.ipynb`
+### Buoc 6: Chay OpenCV Stitcher baseline
 
-   Case-study so sanh feature detector/descriptor tren mot scene cu the. Notebook nay doc anh da tien xu ly tu `data/preprocessing/...`, vi vay can chay Buoc 2 truoc.
+Mo notebook 06 va chay tat ca cell:
 
-   Notebook cung co phan minh hoa cach cac method hoat dong: gradient/DoG/Harris/FAST cues, keypoint overlay cho tung pipeline, descriptor-vector heatmap/bit map, va HOG patch orientation.
+```text
+notebooks/PhamHungSon_15_06_opencv_scene_stitcher.ipynb
+```
 
-   Cau hinh khuyen nghi trong notebook:
+Notebook 06 sinh:
 
-   ```python
-   SPLIT_NAME = "failure_analysis"
-   INPUT_KIND = "feature_gray"
-   SCENE_ID = "scene_14"
-   PAIR_INDEX = 1
-   ```
+```text
+outputs/openCV/logs/batch_summary_panorama.csv
+outputs/openCV/logs/scene_XX_opencv_panorama_summary.json
+outputs/openCV/panoramas/
+```
 
-   Notebook so sanh cac pipeline:
+Nen chay OpenCV baseline truoc khi chay comparison trong Buoc 7, vi comparison can `batch_summary_panorama.csv`.
 
-   ```text
-   ORB
-   AKAZE
-   Harris + HOG
-   SIFT
-   ```
+### Buoc 7: Chay manual geometry stitcher va comparison
 
-4. `notebooks/PhamHungSon_15_04_batch_feature_matching.ipynb`
+Chay manual stitcher cho cac split showcase:
 
-   Doc feature da luu tu `data/feature_extract/<split>/<scene>/<descriptor>/`, sau do chay descriptor matching, Lowe ratio test, homography/RANSAC va tinh reprojection error tren cac cap anh lien ke. Notebook luu `pair_metrics.csv`, `scene_method_summary.csv`, `method_summary.csv`, `weak_pair_summary.csv`, match preview, heatmap, timeline, boxplot, failure-analysis overview, weak-pair chart, method-quality bubble chart va montage vao `outputs/batch_feature_matching/`.
+```powershell
+conda run -n image_recognition python scripts\PhamHungSon_15_manual_homography_stitcher.py --split test --split failure_analysis --profile balanced --method auto --feature-source cache --use-batch-metrics --allow-partial --overwrite
+```
 
-   Mac dinh notebook chay cac split showcase (`test` va `failure_analysis`):
+Sau do so sanh manual voi OpenCV:
 
-   ```python
-   SPLITS_TO_RUN = ["test", "failure_analysis"]
-   RUN_FULL_BATCH = True
-   ```
+```powershell
+conda run -n image_recognition python scripts\PhamHungSon_15_compare_manual_opencv_stitching.py --split test --split failure_analysis --side-by-side-limit 30
+```
 
-   Neu muon notebook 04 chay ca development, them `development` vao `SPLITS_TO_RUN` hoac dung script voi `--split all`. Neu chi chay nhanh mot vai scene, doi `RUN_FULL_BATCH = False` va chinh `SELECTED_SPLIT`, `SELECTED_SCENES`.
+Tong hop failure-analysis theo problem labels:
 
-5. `notebooks/PhamHungSon_15_05_manual_homography_stitcher.ipynb`
+```powershell
+conda run -n image_recognition python scripts\PhamHungSon_15_summarize_failure_problem_stitching.py
+```
 
-   Tao panorama bang pipeline thu cong: doc feature cache tu `data/feature_extract`, dung ket qua Notebook 04 de chon method cho tung cap anh, uoc luong homography bang RANSAC, chain homography, warp anh len canvas chung va blend overlap. Notebook nay giai thich ro cach stitch anh thay vi chi goi OpenCV Stitcher, dong thoi co phan so sanh output manual voi OpenCV Stitcher.
+Output:
 
-6. `notebooks/PhamHungSon_15_06_opencv_scene_stitcher.ipynb`
+```text
+outputs/manual_homography_stitcher/manual_homography_manifest.csv
+outputs/manual_homography_stitcher/logs/
+outputs/manual_homography_stitcher/panoramas/
+outputs/manual_homography_stitcher/comparison/
+outputs/failure_problem_analysis/
+```
 
-   Chay baseline OpenCV Stitcher tren anh goc trong `data/split`. Notebook dung `cv2.Stitcher` nguyen ban, chi resize input de kiem soat kich thuoc anh, khong them preprocessing/enhancement ngoai pipeline noi bo cua OpenCV.
+### Buoc 8: Notebooks giai thich/optional
 
-7. `notebooks/PhamHungSon_15_07_manual_projection_previews.ipynb`
+Sau khi cac output chinh da co, co the mo cac notebook giai thich:
 
-   Minh hoa homography chain, full-canvas projection va cylindrical projection de phan tich drift, canvas growth va loi hinh hoc. Notebook nay dung de giai thich, khong thay the OpenCV Stitcher baseline.
+```text
+notebooks/PhamHungSon_15_02_preprocessing.ipynb
+notebooks/PhamHungSon_15_03_feature_extractor.ipynb
+notebooks/PhamHungSon_15_05_manual_homography_stitcher.ipynb
+notebooks/PhamHungSon_15_07_manual_projection_previews.ipynb
+```
+
+Notebook 02 va 03 chu yeu minh hoa ly thuyet/preprocessing/feature descriptors. Notebook 05 co the chay manual demo trong notebook, nhung lenh script o Buoc 7 la cach nhanh va day du nhat de sinh output manual cho tat ca scene showcase.
+
+## 6. Tom tat thu tu chay day du
+
+Neu nguoi cham muon chay lai tu dau, thu tu ngan gon la:
+
+```text
+1. Validate dataset
+2. Run Notebook 01 data audit
+3. Run preprocessing commands for development/test/failure_analysis
+4. Run feature extraction with --split all --descriptor all
+5. Run Notebook 04 batch matching
+6. Run Notebook 06 OpenCV baseline
+7. Run manual stitcher script
+8. Run manual-vs-OpenCV comparison script
+9. Run failure-problem summary script
+10. Optional: run Notebook 02/03/05/07 for explanation figures
+```
 
 ## 7. Output quan trong
 
@@ -268,7 +334,7 @@ outputs/batch_feature_matching/
 outputs/manual_homography_stitcher/
 outputs/manual_homography_stitcher/comparison/
 outputs/openCV/
-outputs/manual/
+outputs/failure_problem_analysis/
 data/preprocessing/
 data/feature_extract/
 ```
@@ -277,7 +343,15 @@ Nhung thu muc nay la output sinh ra khi chay, khong can co san trong goi nop bai
 
 ## 8. Loi thuong gap
 
-Neu notebook 03 bao khong tim thay `data/preprocessing/...`, hay chay lai Buoc 2.
+Neu notebook 03 bao khong tim thay `data/preprocessing/...`, hay chay lai Buoc 3.
+
+Neu `--profile audit_auto` khong ap dung khuyen nghi preprocessing, kiem tra xem da chay notebook 01 va co file nay chua:
+
+```text
+outputs/audit/image_metrics.csv
+```
+
+Neu comparison bao `manual_missing` hoac `opencv_only_or_manual_missing`, nghia la chua chay manual stitcher script cho day du scene showcase. Chay lai lenh manual stitcher o Buoc 7.
 
 Chay manual geometry stitcher cho mot scene:
 
@@ -294,7 +368,7 @@ conda run -n image_recognition python scripts\PhamHungSon_15_manual_homography_s
 So sanh manual stitcher voi OpenCV Stitcher:
 
 ```powershell
-conda run -n image_recognition python scripts\PhamHungSon_15_compare_manual_opencv_stitching.py --side-by-side-limit 16
+conda run -n image_recognition python scripts\PhamHungSon_15_compare_manual_opencv_stitching.py --split test --split failure_analysis --side-by-side-limit 30
 ```
 
 Chay portable one-scene pipeline, phu hop de dua logic vao ung dung Android/Python bridge:

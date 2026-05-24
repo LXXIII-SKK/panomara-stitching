@@ -117,7 +117,7 @@ data/preprocessing/<split>/feature_gray/<scene>/
 Run one descriptor on one scene:
 
 ```powershell
-conda run -n image_recognition python scripts\PhamHungSon_15_extract_features.py --split failure_analysis --scene scene_14 --descriptor SIFT
+conda run -n image_recognition python scripts\PhamHungSon_15_extract_features.py --split failure_analysis --scene scene_32 --descriptor SIFT
 ```
 
 Run one descriptor on an entire split:

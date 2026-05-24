@@ -94,9 +94,9 @@ def compute_gray_metrics(gray: np.ndarray) -> dict[str, float]:
 
 
 def adjust_gamma(gray_img: np.ndarray, gamma: float) -> np.ndarray:
+    """Apply gamma correction using gamma < 1 to brighten and gamma > 1 to darken."""
     gamma = max(float(gamma), 1e-4)
-    inv_gamma = 1.0 / gamma
-    lut = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)], dtype=np.uint8)
+    lut = np.array([((i / 255.0) ** gamma) * 255 for i in range(256)], dtype=np.uint8)
     return cv2.LUT(gray_img, lut)
 
 

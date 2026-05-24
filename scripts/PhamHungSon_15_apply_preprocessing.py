@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  python scripts/PhamHungSon_15_apply_preprocessing.py --split split --ordered-only\n"
             "  python scripts/PhamHungSon_15_apply_preprocessing.py --scene scene_04 --scene scene_21\n"
             "  python scripts/PhamHungSon_15_apply_preprocessing.py --image scene_04/img_01.jpg --image scene_30/img_03.jpg\n"
-            "  python scripts/PhamHungSon_15_apply_preprocessing.py --skip-scene scene_14 --skip-image scene_29/img_08.jpg\n"
+            "  python scripts/PhamHungSon_15_apply_preprocessing.py --skip-scene scene_15 --skip-image scene_21/img_08.jpg\n"
             "  python scripts/PhamHungSon_15_apply_preprocessing.py --ordered-only --profile baseline --output-kind both\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -134,6 +134,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gaussian-kernel", type=int, default=3, help="Gaussian blur kernel size.")
     parser.add_argument("--clahe-clip-limit", type=float, default=2.0, help="CLAHE clipLimit parameter.")
     parser.add_argument("--clahe-tile-grid", type=int, default=8, help="CLAHE tile grid size.")
+    parser.add_argument("--target-brightness", type=float, default=128.0, help="Target grayscale/L-channel mean used by enhanced/audit auto-gamma.")
+    parser.add_argument("--gamma-min", type=float, default=0.7, help="Minimum auto-gamma value. Lower values brighten dark images more aggressively.")
+    parser.add_argument("--gamma-max", type=float, default=1.5, help="Maximum auto-gamma value. Higher values darken bright images more aggressively.")
     parser.add_argument("--denoise", action="store_true", help="Force non-local means denoising.")
     parser.add_argument("--unsharp", action="store_true", help="Force an unsharp-mask finishing step.")
     parser.add_argument(
@@ -312,6 +315,9 @@ def build_config(args, recommendations: set[str]) -> PreprocessConfig:
         enable_brightness_normalization=enable_brightness,
         enable_denoise=args.denoise,
         enable_unsharp=enable_unsharp,
+        target_brightness=args.target_brightness,
+        gamma_min=args.gamma_min,
+        gamma_max=args.gamma_max,
     )
 
 

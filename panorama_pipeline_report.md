@@ -100,10 +100,10 @@ Preprocessing mainly helps image-quality problems. It is less useful when the fa
 | Exposure change | `scene_30` | Often yes | Gamma correction, brightness normalization, CLAHE, histogram matching | Keep exposure more consistent during capture |
 | Motion blur | `scene_35` | Slightly | Mild sharpening or unsharp mask, careful denoising | Drop blurry frames or choose sharper captures |
 | Moving objects | `scene_35` | Usually no | Mask dynamic regions if available | Remove affected frames or rely on static background matches |
-| Repeated patterns | `scene_13` | Usually no | Mild contrast only; avoid over-enhancement | Use stricter RANSAC/geometric checks or inspect matches manually |
-| Parallax | `scene_14` | No | Not a preprocessing issue | Use local warping, split the scene, or recapture with rotation around one viewpoint |
+| Repeated patterns | `scene_32` | Usually no | Mild contrast only; avoid over-enhancement | Use stricter RANSAC/geometric checks or inspect matches manually |
+| Parallax | `scene_15`, `scene_16` | No | Not a preprocessing issue | Use local warping, split the scene, or recapture with rotation around one viewpoint |
 | Insufficient overlap | `scene_04` | No | Not fixable by contrast or filtering | Recapture with more overlap, drop the broken transition, or split the scene |
-| Sideways scan / translated capture | `scene_14`, `scene_15` | Mostly no | Crop or split only as a diagnostic step | Use a different stitching model or avoid treating it as a pure panorama |
+| Sideways scan / translated capture | `scene_15`, `scene_16` | Mostly no | Crop or split only as a diagnostic step | Use a different stitching model or avoid treating it as a pure panorama |
 | Global stitch failure | `scene_08` | Sometimes | Standardized resize, CLAHE, brightness normalization | Split the chain or inspect whether OpenCV rejects global camera estimation |
 | Wide sweep / long chain | `scene_21` | Partially | Exposure normalization and consistent resize | Reduce chain length, select fewer frames, or stitch in smaller groups |
 | Output variation / instability | `scene_30` | Partially | Fixed input order, fixed resize, consistent preprocessing | Repeat runs, compare logs, and keep the most stable configuration |
@@ -183,7 +183,7 @@ This stage turns the pair-level matching/RANSAC results into an explicit panoram
 
 The portable script can also run on a standalone scene folder without project metadata. It exposes fast, balanced, and quality profiles so a weak device can choose ORB at lower resolution while a stronger device can use higher resolution, more features, SIFT/AKAZE candidates, and feather blending.
 
-The manual-vs-OpenCV comparison reads manual stitcher logs and the OpenCV batch summary, then writes a scene-level table and visual side-by-side panels. In the latest affine-manual showcase run, the comparison contains 15 scenes from `test` and `failure_analysis`: 6 `both_ok`, 2 `both_ok_manual_partial`, 5 `manual_only`, and 2 `manual_partial_only`. The `manual_only` label means OpenCV returned an error but the manual chain saved an output; it does not automatically mean the manual panorama is visually better, because the manual method has no global bundle adjustment, seam optimization, or exposure compensation. The partial labels mean the manual method only used a valid contiguous sub-chain.
+The manual-vs-OpenCV comparison reads manual stitcher logs and the OpenCV batch summary, then writes a scene-level table and visual side-by-side panels. In the latest affine-manual showcase run, the comparison contains 19 scenes from `test` and `failure_analysis`: 14 `both_ok`, 4 `manual_only`, and 1 `both_failed_or_missing`. The `manual_only` label means OpenCV returned an error but the manual chain saved an output; it does not automatically mean the manual panorama is visually better, because the manual method has no global bundle adjustment, seam optimization, or exposure compensation.
 
 Outputs are saved under:
 

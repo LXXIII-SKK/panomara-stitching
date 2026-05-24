@@ -58,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scope = parser.add_argument_group("Selection")
     scope.add_argument("--split", action="append", help="development, test, failure_analysis, or all. Repeatable.")
-    scope.add_argument("--scene", action="append", dest="scenes", help="Scene id to run, e.g. scene_14. Repeatable.")
+    scope.add_argument("--scene", action="append", dest="scenes", help="Scene id to run, e.g. scene_15. Repeatable.")
     scope.add_argument("--scene-folder", action="append", type=Path, help="Custom scene folder outside data/split. Repeatable.")
     scope.add_argument("--limit-scenes", type=int, default=0, help="Optional maximum number of resolved scenes.")
 

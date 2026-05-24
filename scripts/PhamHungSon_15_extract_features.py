@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "Examples:\n"
-            "  conda run -n image_recognition python scripts/PhamHungSon_15_extract_features.py --split failure_analysis --scene scene_14 --descriptor SIFT\n"
+            "  conda run -n image_recognition python scripts/PhamHungSon_15_extract_features.py --split failure_analysis --scene scene_32 --descriptor SIFT\n"
             "  conda run -n image_recognition python scripts/PhamHungSon_15_extract_features.py --split test --scene scene_01 --descriptor SIFT\n"
             "  conda run -n image_recognition python scripts/PhamHungSon_15_extract_features.py --split test --descriptor ORB --descriptor AKAZE\n"
             "  conda run -n image_recognition python scripts/PhamHungSon_15_extract_features.py --descriptor all --overwrite\n\n"
