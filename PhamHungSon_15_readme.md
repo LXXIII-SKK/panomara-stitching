@@ -13,7 +13,7 @@ File nay huong dan cach chay goi nop bai thi cuoi ky trong thu muc `final_report
 Link du lieu:
 
 ```text
-https://drive.google.com/drive/folders/1MLb_hScN_5qY6bSoVM65Q9w8KLP_sLU9?usp=drive_link
+https://drive.google.com/drive/folders/1lbKYJAQiQjfx7git-AQVQYfMW3v5XgCm?usp=sharing
 ```
 
 Sau khi tai, giai nen/copy thu muc `data` vao trong `final_report` sao cho cau truc co dang:
@@ -58,7 +58,8 @@ final_report/
   PhamHungSon_15_readme.md
   requirements.txt
   panorama_pipeline_report.md
-  panorama_method_comparison_report.md
+  PhamHungSon_15_report.pdf
+  PhamHungSon_15_presentation.pptx
   Computer_Vision___Final_Report/
     main.tex
     main.pdf
@@ -85,6 +86,10 @@ final_report/
   project_utils/
     panorama_dataset.py
     preprocessing.py
+
+  presentation/
+    PhamHungSon_15_presentation.pptx
+    equation_assets/
 ```
 
 Thu muc `data/preprocessing`, `data/feature_extract`, va `outputs` se duoc sinh ra khi chay script/notebook.

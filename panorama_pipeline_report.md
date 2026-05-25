@@ -183,7 +183,7 @@ This stage turns the pair-level matching/RANSAC results into an explicit panoram
 
 The portable script can also run on a standalone scene folder without project metadata. It exposes fast, balanced, and quality profiles so a weak device can choose ORB at lower resolution while a stronger device can use higher resolution, more features, SIFT/AKAZE candidates, and feather blending.
 
-The manual-vs-OpenCV comparison reads manual stitcher logs and the OpenCV batch summary, then writes a scene-level table and visual side-by-side panels. In the latest affine-manual showcase run, the comparison contains 19 scenes from `test` and `failure_analysis`: 14 `both_ok`, 4 `manual_only`, and 1 `both_failed_or_missing`. The `manual_only` label means OpenCV returned an error but the manual chain saved an output; it does not automatically mean the manual panorama is visually better, because the manual method has no global bundle adjustment, seam optimization, or exposure compensation.
+The manual-vs-OpenCV comparison reads manual stitcher logs and the OpenCV batch summary, then writes a scene-level table and visual side-by-side panels. In the latest affine-manual showcase run, the comparison contains 19 scenes from `test` and `failure_analysis`: 11 `both_ok`, 2 `both_ok_manual_partial`, 4 `manual_only`, 1 `manual_partial_only`, and 1 `both_failed_or_missing`. The `manual_only` label means OpenCV returned an error but the manual chain saved an output; it does not automatically mean the manual panorama is visually better, because the manual method has no global bundle adjustment, seam optimization, or exposure compensation.
 
 Outputs are saved under:
 

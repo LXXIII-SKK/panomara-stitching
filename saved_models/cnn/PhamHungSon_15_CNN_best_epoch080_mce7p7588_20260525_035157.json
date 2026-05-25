@@ -1,0 +1,14 @@
+﻿{
+    "archived_at":  "2026-05-25 06:17:05 +07:00",
+    "source":  "C:\\Users\\PC\\Downloads\\Project\\scripts\\cnn\\PhamHungSon_15_CNN_CheckpointsSupRegularized\\PhamHungSon_15_CNN_best_model.ckpt",
+    "archived_checkpoint":  "C:\\Users\\PC\\Downloads\\Project\\saved_models\\cnn\\PhamHungSon_15_CNN_best_epoch080_mce7p7588_20260525_035157.ckpt",
+    "checkpoint_sha256":  "D0BFE6CF7F9A0C30825A5BFAE7795B67F4221B949C722FDB8FA267DB51BD9074",
+    "epoch":  80,
+    "best_validation_mce_px":  7.7587775929768883,
+    "backbone":  "ConvNet",
+    "input_mode":  "legacy basic",
+    "output_activation":  "legacy tanh",
+    "dropout":  0.6,
+    "minibatch_size":  32,
+    "note":  "Archived before clearing old supervised CNN checkpoints/logs."
+}

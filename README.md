@@ -11,12 +11,18 @@ The current project stage covers:
 - preprocessing for feature extraction
 - single-scene feature/descriptor case study
 - batch feature matching and RANSAC evaluation
-- manual homography-chain stitching from cached features
+- manual geometry stitching from cached features, using affine-chain by default
 - OpenCV Stitcher baseline
 - manual-vs-OpenCV stitching comparison
 - manual projection previews for geometry analysis
 
 The default notebook/script path now focuses on `test` and `failure_analysis` because these are the scenes that need manual judgment for the showcase. The `development` split is still kept for internal tuning and can be run explicitly with `--split development` or `--split all`.
+
+Final named deliverables are stored under `final_report/`:
+
+- `PhamHungSon_15_report.pdf`
+- `PhamHungSon_15_presentation.pptx`
+- `PhamHungSon_15_readme.md`
 
 ## Repository Structure
 
@@ -54,7 +60,7 @@ scripts/
 Dataset link:
 
 ```text
-https://drive.google.com/drive/folders/1MLb_hScN_5qY6bSoVM65Q9w8KLP_sLU9?usp=drive_link
+https://drive.google.com/drive/folders/1lbKYJAQiQjfx7git-AQVQYfMW3v5XgCm?usp=sharing
 ```
 
 After downloading, the expected layout is:
@@ -80,13 +86,13 @@ data/split/failure_analysis/scene_XX/
    Runs the same method pipelines across selected or full dataset scene pairs, then saves pair, scene, method-level RANSAC summaries, and visualization dashboards.
 
 5. `PhamHungSon_15_05_manual_homography_stitcher.ipynb`  
-   Builds a from-scratch homography-chain panorama using cached features and Notebook 04 pair-method scores, then compares available manual outputs against the OpenCV Stitcher baseline.
+   Builds a from-scratch manual geometry panorama using cached features and Notebook 04 pair-method scores. The final showcase uses affine-chain by default, with homography still available for geometry experiments, then compares manual outputs against the OpenCV Stitcher baseline.
 
 6. `PhamHungSon_15_06_opencv_scene_stitcher.ipynb`  
    Runs the OpenCV Stitcher baseline and records panorama outputs and logs.
 
 7. `PhamHungSon_15_07_manual_projection_previews.ipynb`  
-   Shows manual homography-chain and cylindrical projection previews for geometry analysis.
+   Shows manual affine/homography-chain and cylindrical projection previews for geometry analysis.
 
 ## Reproducible Commands
 

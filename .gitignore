@@ -4,8 +4,15 @@ data/
 # Mobile app, not needed to upload
 mobile_app/
 
+presentation/
+
+Computer_Vision___Final_Report/
+
+scripts/cnn/PhamHungSon_15_CNN_CheckpointsSupRegularized/
+scripts/cnn/PhamHungSon_15_CNN_LogsSupRegularized/
+
 # Final report will not be uploaded
-final_report/
+PhamHungSon_15/
 
 # Generated outputs
 outputs/
